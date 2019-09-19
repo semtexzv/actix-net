@@ -1,14 +1,21 @@
 use std::marker::PhantomData;
 
-use futures::{Async, Future, Poll};
+use futures::{Future, Poll};
 
 use super::{NewService, Service};
+
+use pin_project::pin_project;
+use std::pin::Pin;
+use std::task::Context;
+use futures::future::Ready;
 
 /// Service for the `map_err` combinator, changing the type of a service's
 /// error.
 ///
 /// This is created by the `ServiceExt::map_err` method.
+#[pin_project]
 pub struct MapErr<A, F, E> {
+    #[pin]
     service: A,
     f: F,
     _t: PhantomData<E>,
@@ -53,8 +60,8 @@ where
     type Error = E;
     type Future = MapErrFuture<A, F, E>;
 
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        self.service.poll_ready().map_err(&self.f)
+    fn poll_ready(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project().service.poll_ready(ctx).map_err(&self.f)
     }
 
     fn call(&mut self, req: A::Request) -> Self::Future {
@@ -62,12 +69,14 @@ where
     }
 }
 
+#[pin_project]
 pub struct MapErrFuture<A, F, E>
 where
     A: Service,
     F: Fn(A::Error) -> E,
 {
     f: F,
+    #[pin]
     fut: A::Future,
 }
 
@@ -86,12 +95,12 @@ where
     A: Service,
     F: Fn(A::Error) -> E,
 {
-    type Item = A::Response;
-    type Error = E;
+    type Output = Result<A::Response,E>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.fut.poll().map_err(&self.f)
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.project().fut.poll(cx).map_err(&self.f)
     }
+
 }
 
 /// NewService for the `map_err` combinator, changing the type of a new
@@ -155,12 +164,13 @@ where
         MapErrNewServiceFuture::new(self.a.new_service(cfg), self.f.clone())
     }
 }
-
+#[pin_project]
 pub struct MapErrNewServiceFuture<A, F, E>
 where
     A: NewService,
     F: Fn(A::Error) -> E,
 {
+    #[pin]
     fut: A::Future,
     f: F,
 }
@@ -180,16 +190,17 @@ where
     A: NewService,
     F: Fn(A::Error) -> E + Clone,
 {
-    type Item = MapErr<A::Service, F, E>;
-    type Error = A::InitError;
+    type Output = Result<MapErr<A::Service,F,E>,A::InitError>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Async::Ready(service) = self.fut.poll()? {
-            Ok(Async::Ready(MapErr::new(service, self.f.clone())))
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project_into();
+        if let Poll::Ready(svc) =  this.fut.poll(cx)? {
+            Poll::Ready(Ok(MapErr::new(svc,this.f.clone())))
         } else {
-            Ok(Async::NotReady)
+            Poll::Pending
         }
     }
+
 }
 
 #[cfg(test)]

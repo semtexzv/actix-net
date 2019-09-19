@@ -6,6 +6,10 @@ use crate::and_then::AndThen;
 use crate::from_err::FromErr;
 use crate::{NewService, Transform};
 
+use pin_project::pin_project;
+use std::task::Context;
+use std::pin::Pin;
+
 /// `Apply` new service combinator
 pub struct AndThenTransform<T, A, B> {
     a: A,
@@ -72,6 +76,7 @@ where
     }
 }
 
+#[pin_project]
 pub struct AndThenTransformFuture<T, A, B>
 where
     A: NewService,
@@ -79,8 +84,11 @@ where
     T: Transform<B::Service, Request = A::Response, InitError = A::InitError>,
     T::Error: From<A::Error>,
 {
+    #[pin]
     fut_a: A::Future,
+    #[pin]
     fut_b: B::Future,
+    #[pin]
     fut_t: Option<T::Future>,
     a: Option<A::Service>,
     t: Option<T::Transform>,
@@ -94,9 +102,44 @@ where
     T: Transform<B::Service, Request = A::Response, InitError = A::InitError>,
     T::Error: From<A::Error>,
 {
-    type Item = AndThen<FromErr<A::Service, T::Error>, T::Transform>;
-    type Error = T::InitError;
 
+    type Output = Result<AndThen<FromErr<A::Service, T::Error>, T::Transform>,T::InitError>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project_into();
+
+        if this.fut_t.is_none() {
+            if let Poll::Ready(svc) = this.fut_b.poll(cx)? {
+                this.fut_t.set(Some(this.t_cell.new_transform(svc)))
+            }
+        }
+
+        if this.a.is_none() {
+            if let Poll::Ready(svc) = this.fut_a.poll(cx)? {
+                *this.a = Some(svc)
+            }
+        }
+
+        if let Some(fut) = this.fut_t.as_pin_mut() {
+            if let Poll::Ready(transform) = fut.poll(cx)? {
+                *this.t = Some(transform)
+            }
+        }
+
+        if this.a.is_some() && this.t.is_some() {
+            Poll::Ready(Ok(AndThen::new(
+                FromErr::new(this.a.take().unwrap()),
+                this.t.take().unwrap(),
+            )))
+        } else {
+            Poll::Pending
+        }
+
+    }
+
+
+
+    /*
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         if self.fut_t.is_none() {
             if let Async::Ready(service) = self.fut_b.poll()? {
@@ -125,6 +168,7 @@ where
             Ok(Async::NotReady)
         }
     }
+    */
 }
 
 #[cfg(test)]

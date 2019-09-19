@@ -11,9 +11,9 @@ use std::task::Context;
 mod cell;
 
 mod and_then;
-/*
 mod and_then_apply;
 mod and_then_apply_fn;
+/*
 mod apply;
 mod apply_cfg;
 pub mod blank;
@@ -23,13 +23,10 @@ mod fn_transform;
 */
 mod from_err;
 mod map;
-/*
 mod map_config;
-
 mod map_err;
 mod map_init_err;
 mod then;
-*/
 mod transform;
 mod transform_err;
 
@@ -41,8 +38,8 @@ pub use self::fn_service::{new_service_cfg, new_service_fn, service_fn, ServiceF
 pub use self::fn_transform::transform_fn;
 */
 pub use self::from_err::{FromErr, FromErrNewService};
-/*
 pub use self::map::{Map, MapNewService};
+/*
 pub use self::map_config::{MapConfig, MappedConfig, UnitConfig};
 pub use self::map_err::{MapErr, MapErrNewService};
 pub use self::map_init_err::MapInitErr;
