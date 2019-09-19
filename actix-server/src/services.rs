@@ -5,13 +5,15 @@ use std::time::Duration;
 use actix_rt::spawn;
 use actix_server_config::{Io, ServerConfig};
 use actix_service::{NewService, Service};
-use futures::future::{err, ok, FutureResult};
+use futures::future::{err, ok, Ready, LocalBoxFuture};
 use futures::{Future, Poll};
 use log::error;
 
 use super::Token;
 use crate::counter::CounterGuard;
 use crate::socket::{FromStream, StdStream};
+use std::pin::Pin;
+use std::task::Context;
 
 /// Server message
 pub(crate) enum ServerMessage {
@@ -24,7 +26,7 @@ pub(crate) enum ServerMessage {
 }
 
 pub trait ServiceFactory<Stream: FromStream>: Send + Clone + 'static {
-    type NewService: NewService<Config = ServerConfig, Request = Io<Stream>>;
+    type NewService: NewService<Config=ServerConfig, Request=Io<Stream>>;
 
     fn create(&self) -> Self::NewService;
 }
@@ -34,15 +36,15 @@ pub(crate) trait InternalServiceFactory: Send {
 
     fn clone_factory(&self) -> Box<dyn InternalServiceFactory>;
 
-    fn create(&self) -> Box<dyn Future<Item = Vec<(Token, BoxedServerService)>, Error = ()>>;
+    fn create(&self) -> LocalBoxFuture<Result<Vec<(BoxedServerService)>,()>>;
 }
 
 pub(crate) type BoxedServerService = Box<
     dyn Service<
-        Request = (Option<CounterGuard>, ServerMessage),
-        Response = (),
-        Error = (),
-        Future = FutureResult<(), ()>,
+        Request=(Option<CounterGuard>, ServerMessage),
+        Response=(),
+        Error=(),
+        Future=Ready<Result<(), ()>>,
     >,
 >;
 
@@ -57,21 +59,27 @@ impl<T> StreamService<T> {
 }
 
 impl<T, I> Service for StreamService<T>
-where
-    T: Service<Request = Io<I>>,
-    T::Future: 'static,
-    T::Error: 'static,
-    I: FromStream,
+    where
+        T: Service<Request=Io<I>>,
+        T::Future: 'static,
+        T::Error: 'static,
+        I: FromStream,
 {
     type Request = (Option<CounterGuard>, ServerMessage);
     type Response = ();
     type Error = ();
-    type Future = FutureResult<(), ()>;
+    type Future = Ready<Result<(), ()>>;
 
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        unimplemented!()
+    }
+
+
+    /*
     fn poll_ready(&mut self) -> Poll<(), Self::Error> {
         self.service.poll_ready().map_err(|_| ())
     }
-
+    */
     fn call(&mut self, (guard, req): (Option<CounterGuard>, ServerMessage)) -> Self::Future {
         match req {
             ServerMessage::Connect(stream) => {
@@ -103,9 +111,9 @@ pub(crate) struct StreamNewService<F: ServiceFactory<Io>, Io: FromStream> {
 }
 
 impl<F, Io> StreamNewService<F, Io>
-where
-    F: ServiceFactory<Io>,
-    Io: FromStream + Send + 'static,
+    where
+        F: ServiceFactory<Io>,
+        Io: FromStream + Send + 'static,
 {
     pub(crate) fn create(
         name: String,
@@ -124,9 +132,9 @@ where
 }
 
 impl<F, Io> InternalServiceFactory for StreamNewService<F, Io>
-where
-    F: ServiceFactory<Io>,
-    Io: FromStream + Send + 'static,
+    where
+        F: ServiceFactory<Io>,
+        Io: FromStream + Send + 'static,
 {
     fn name(&self, _: Token) -> &str {
         &self.name
@@ -142,7 +150,7 @@ where
         })
     }
 
-    fn create(&self) -> Box<dyn Future<Item = Vec<(Token, BoxedServerService)>, Error = ()>> {
+    fn create(&self) -> Box<dyn Future<Output=Result<Vec<(Token, BoxedServerService)>, ()>>> {
         let token = self.token;
         let config = ServerConfig::new(self.addr);
         Box::new(
@@ -167,16 +175,16 @@ impl InternalServiceFactory for Box<dyn InternalServiceFactory> {
         self.as_ref().clone_factory()
     }
 
-    fn create(&self) -> Box<dyn Future<Item = Vec<(Token, BoxedServerService)>, Error = ()>> {
+    fn create(&self) -> Box<dyn Future<Output=Result<Vec<(Token, BoxedServerService)>, ()>>> {
         self.as_ref().create()
     }
 }
 
 impl<F, T, I> ServiceFactory<I> for F
-where
-    F: Fn() -> T + Send + Clone + 'static,
-    T: NewService<Config = ServerConfig, Request = Io<I>>,
-    I: FromStream,
+    where
+        F: Fn() -> T + Send + Clone + 'static,
+        T: NewService<Config=ServerConfig, Request=Io<I>>,
+        I: FromStream,
 {
     type NewService = T;
 

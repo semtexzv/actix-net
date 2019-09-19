@@ -4,12 +4,12 @@ use std::{io, mem, net};
 use actix_rt::{spawn, Arbiter, System};
 use futures::future::{lazy, ok};
 use futures::stream::futures_unordered;
-use futures::sync::mpsc::{unbounded, UnboundedReceiver};
-use futures::{Async, Future, Poll, Stream};
+use futures::channel::mpsc::{unbounded, UnboundedReceiver};
+use futures::{Future, Poll, Stream};
 use log::{error, info};
 use net2::TcpBuilder;
 use num_cpus;
-use tokio_tcp::TcpStream;
+use tokio_net::tcp::TcpStream;
 use tokio_timer::sleep;
 
 use crate::accept::{AcceptLoop, AcceptNotify, Command};
@@ -20,6 +20,8 @@ use crate::signals::{Signal, Signals};
 use crate::socket::StdListener;
 use crate::worker::{self, Worker, WorkerAvailability, WorkerClient};
 use crate::{ssl, Token};
+use std::pin::Pin;
+use std::task::Context;
 
 /// Server builder
 pub struct ServerBuilder {
@@ -447,6 +449,13 @@ impl ServerBuilder {
 }
 
 impl Future for ServerBuilder {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        unimplemented!()
+    }
+
+    /*
     type Item = ();
     type Error = ();
 
@@ -459,6 +468,7 @@ impl Future for ServerBuilder {
             }
         }
     }
+    */
 }
 
 pub(super) fn bind_addr<S: net::ToSocketAddrs>(
