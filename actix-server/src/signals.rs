@@ -2,9 +2,12 @@ use std::io;
 
 use actix_rt::spawn;
 use futures::stream::futures_unordered;
-use futures::{Async, Future, Poll, Stream};
+use futures::{Future, Poll, Stream, TryStream};
 
 use crate::server::Server;
+use std::pin::Pin;
+use std::task::Context;
+use futures::future::LocalBoxFuture;
 
 /// Different types of process signals
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -27,14 +30,14 @@ pub(crate) struct Signals {
     streams: Vec<SigStream>,
 }
 
-type SigStream = Box<dyn Stream<Item = Signal, Error = io::Error>>;
+type SigStream = Box<dyn TryStream<Ok = Signal, Error = io::Error>>;
 
 impl Signals {
     pub(crate) fn start(srv: Server) {
         let fut = {
             #[cfg(not(unix))]
             {
-                tokio_signal::ctrl_c()
+                tokio_net::signal::ctrl_c()
                     .map_err(|_| ())
                     .and_then(move |stream| Signals {
                         srv,
@@ -44,18 +47,18 @@ impl Signals {
 
             #[cfg(unix)]
             {
-                use tokio_signal::unix;
+                use tokio_net::signal::unix;
 
-                let mut sigs: Vec<Box<dyn Future<Item = SigStream, Error = io::Error>>> =
+                let mut sigs: Vec<LocalBoxFuture<'static, Result<SigStream,io::Error>>> = 
                     Vec::new();
                 sigs.push(Box::new(
-                    tokio_signal::unix::Signal::new(tokio_signal::unix::SIGINT).map(|stream| {
+                    tokio_net::signal::unix::Signal::new(tokio_net::signal::unix::libc::SIGINT).map(|stream| {
                         let s: SigStream = Box::new(stream.map(|_| Signal::Int));
                         s
                     }),
                 ));
                 sigs.push(Box::new(
-                    tokio_signal::unix::Signal::new(tokio_signal::unix::SIGHUP).map(
+                    tokio_net::signal::unix::Signal::new(tokio_net::signal::unix::libc::SIGHUP).map(
                         |stream: unix::Signal| {
                             let s: SigStream = Box::new(stream.map(|_| Signal::Hup));
                             s
@@ -63,7 +66,7 @@ impl Signals {
                     ),
                 ));
                 sigs.push(Box::new(
-                    tokio_signal::unix::Signal::new(tokio_signal::unix::SIGTERM).map(
+                    tokio_net::signal::unix::Signal::new(tokio_net::signal::unix::libc::SIGTERM).map(
                         |stream| {
                             let s: SigStream = Box::new(stream.map(|_| Signal::Term));
                             s
@@ -71,7 +74,7 @@ impl Signals {
                     ),
                 ));
                 sigs.push(Box::new(
-                    tokio_signal::unix::Signal::new(tokio_signal::unix::SIGQUIT).map(
+                    tokio_net::signal::unix::Signal::new(tokio_net::signal::unix::libc::SIGQUIT).map(
                         |stream| {
                             let s: SigStream = Box::new(stream.map(|_| Signal::Quit));
                             s
@@ -89,6 +92,13 @@ impl Signals {
 }
 
 impl Future for Signals {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        unimplemented!()
+    }
+
+    /*
     type Item = ();
     type Error = ();
 
@@ -115,4 +125,5 @@ impl Future for Signals {
             Ok(Async::NotReady)
         }
     }
+    */
 }

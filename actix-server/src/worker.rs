@@ -1,11 +1,12 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::{mem, time};
+use std::{mem, time, task};
 
 use actix_rt::{spawn, Arbiter};
-use futures::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use futures::sync::oneshot;
-use futures::{future, Async, Future, Poll, Stream};
+use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
+use futures::channel::oneshot;
+use futures::{future, Future, Poll, Stream, TryFutureExt};
+use futures::FutureExt;
 use log::{error, info, trace};
 use tokio_timer::{sleep, Delay};
 
@@ -14,6 +15,8 @@ use crate::counter::Counter;
 use crate::services::{BoxedServerService, InternalServiceFactory, ServerMessage};
 use crate::socket::{SocketAddr, StdStream};
 use crate::Token;
+use std::pin::Pin;
+use std::task::Context;
 
 pub(crate) struct WorkerCommand(Conn);
 
@@ -198,13 +201,14 @@ impl Worker {
         }
     }
 
-    fn check_readiness(&mut self, trace: bool) -> Result<bool, (Token, usize)> {
+    fn check_readiness(&mut self, trace: bool, cx : &mut Context<'_>) -> Result<bool, (Token, usize)> {
+        /*
         let mut ready = self.conns.available();
         let mut failed = None;
         for (token, service) in &mut self.services.iter_mut().enumerate() {
             if let Some(service) = service {
-                match service.1.poll_ready() {
-                    Ok(Async::Ready(_)) => {
+                match service.1.poll_ready(cx) {
+                    Poll::Ready(Ok(_)) => {
                         if trace {
                             trace!(
                                 "Service {:?} is available",
@@ -212,8 +216,8 @@ impl Worker {
                             );
                         }
                     }
-                    Ok(Async::NotReady) => ready = false,
-                    Err(_) => {
+                    Poll::NotReady => ready = false,
+                    Poll::Ready(Err(_)) => {
                         error!(
                             "Service {:?} readiness check returned error, restarting",
                             self.factories[service.0].name(Token(token))
@@ -227,7 +231,8 @@ impl Worker {
             Err(idx)
         } else {
             Ok(ready)
-        }
+        }*/
+        unimplemented!()
     }
 }
 
@@ -238,15 +243,21 @@ enum WorkerState {
     Restarting(
         usize,
         Token,
-        Box<dyn Future<Item = Vec<(Token, BoxedServerService)>, Error = ()>>,
+        Box<dyn Future<Output=Result<Vec<(Token, BoxedServerService)>, ()>>>,
     ),
     Shutdown(Delay, Delay, oneshot::Sender<bool>),
 }
 
 impl Future for Worker {
-    type Item = ();
-    type Error = ();
 
+
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        unimplemented!()
+    }
+
+    /*
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         // `StopWorker` message handler
         if let Ok(Async::Ready(Some(StopCommand { graceful, result }))) = self.rx2.poll() {
@@ -435,4 +446,5 @@ impl Future for Worker {
             WorkerState::None => panic!(),
         };
     }
+    */
 }
