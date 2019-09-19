@@ -1,24 +1,23 @@
+use std::pin::Pin;
+
+use crate::{IntoFuture, NewService, Service, ServiceExt};
+use futures::future::FutureExt;
+use futures::future::LocalBoxFuture;
 use futures::future::{err, ok, Either, Ready};
 use futures::{Future, Poll};
-
-use crate::{NewService, Service};
-use std::pin::Pin;
 use std::task::Context;
-
-use pin_project::pin_project;
-
 
 pub type BoxedService<Req, Res, Err> = Box<
     dyn Service<
-        Request=Req,
-        Response=Res,
-        Error=Err,
-        Future=BoxedServiceResponse<Res, Err>,
+        Request = Req,
+        Response = Res,
+        Error = Err,
+        Future = BoxedServiceResponse<Res, Err>,
     >,
 >;
 
 pub type BoxedServiceResponse<Res, Err> =
-Either<Ready<Result<Res, Err>>, Box<dyn Future<Output=Result<Res, Err>> + Unpin>>;
+    Either<Ready<Result<Res, Err>>, LocalBoxFuture<'static, Result<Res, Err>>>;
 
 pub struct BoxedNewService<C, Req, Res, Err, InitErr>(Inner<C, Req, Res, Err, InitErr>);
 
@@ -26,15 +25,14 @@ pub struct BoxedNewService<C, Req, Res, Err, InitErr>(Inner<C, Req, Res, Err, In
 pub fn new_service<T>(
     service: T,
 ) -> BoxedNewService<T::Config, T::Request, T::Response, T::Error, T::InitError>
-    where
-        T: NewService + 'static,
-        T::Request: 'static,
-        T::Response: 'static,
-        T::Service: 'static,
-        <T::Service as Service>::Future : Unpin,
-        T::Future: 'static + Unpin,
-        T::Error: 'static,
-        T::InitError: 'static,
+where
+    T: NewService + 'static,
+    T::Request: 'static,
+    T::Response: 'static,
+    T::Service: 'static,
+    T::Future: 'static,
+    T::Error: 'static,
+    T::InitError: 'static,
 {
     BoxedNewService(Box::new(NewServiceWrapper {
         service,
@@ -44,31 +42,31 @@ pub fn new_service<T>(
 
 /// Create boxed service
 pub fn service<T>(service: T) -> BoxedService<T::Request, T::Response, T::Error>
-    where
-        T: Service + 'static,
-        T::Future: 'static,
+where
+    T: Service + 'static,
+    T::Future: 'static,
 {
     Box::new(ServiceWrapper(service))
 }
 
 type Inner<C, Req, Res, Err, InitErr> = Box<
     dyn NewService<
-        Config=C,
-        Request=Req,
-        Response=Res,
-        Error=Err,
-        InitError=InitErr,
-        Service=BoxedService<Req, Res, Err>,
-        Future=Box<dyn Future<Output=Result<BoxedService<Req, Res, Err>, InitErr>>>,
+        Config = C,
+        Request = Req,
+        Response = Res,
+        Error = Err,
+        InitError = InitErr,
+        Service = BoxedService<Req, Res, Err>,
+        Future = LocalBoxFuture<'static, Result<BoxedService<Req, Res, Err>, InitErr>>,
     >,
 >;
 
 impl<C, Req, Res, Err, InitErr> NewService for BoxedNewService<C, Req, Res, Err, InitErr>
-    where
-        Req: 'static,
-        Res: 'static + Unpin,
-        Err: 'static,
-        InitErr: 'static,
+where
+    Req: 'static,
+    Res: 'static,
+    Err: 'static,
+    InitErr: 'static,
 {
     type Request = Req;
     type Response = Res;
@@ -76,8 +74,8 @@ impl<C, Req, Res, Err, InitErr> NewService for BoxedNewService<C, Req, Res, Err,
     type InitError = InitErr;
     type Config = C;
     type Service = BoxedService<Req, Res, Err>;
-    type Future = Box<dyn Future<Output=Result<Self::Service, Self::InitError>> + Unpin>;
 
+    type Future = LocalBoxFuture<'static, Result<Self::Service, InitErr>>;
     fn new_service(&self, cfg: &C) -> Self::Future {
         self.0.new_service(cfg)
     }
@@ -89,15 +87,15 @@ struct NewServiceWrapper<C, T: NewService> {
 }
 
 impl<C, T, Req, Res, Err, InitErr> NewService for NewServiceWrapper<C, T>
-    where
-        Req: 'static,
-        Res: 'static,
-        Err: 'static,
-        InitErr: 'static,
-        T: NewService<Config=C, Request=Req, Response=Res, Error=Err, InitError=InitErr>,
-        T::Future: 'static + Unpin,
-        T::Service: 'static,
-        <T::Service as Service>::Future: 'static + Unpin,
+where
+    Req: 'static,
+    Res: 'static,
+    Err: 'static,
+    InitErr: 'static,
+    T: NewService<Config = C, Request = Req, Response = Res, Error = Err, InitError = InitErr>,
+    T::Future: 'static,
+    T::Service: 'static,
+    <T::Service as Service>::Future: 'static,
 {
     type Request = Req;
     type Response = Res;
@@ -105,25 +103,27 @@ impl<C, T, Req, Res, Err, InitErr> NewService for NewServiceWrapper<C, T>
     type InitError = InitErr;
     type Config = C;
     type Service = BoxedService<Req, Res, Err>;
-    type Future = Box<dyn Future<Output=Result<Self::Service, Self::InitError>> + Unpin>;
+    type Future = LocalBoxFuture<'static, Result<Self::Service, Self::InitError>>;
 
     fn new_service(&self, cfg: &C) -> Self::Future {
-        Box::new(
+        /* TODO: Figure out what the hell is hapenning here
+         Box::new(
             self.service
                 .new_service(cfg)
                 .into_future()
                 .map(ServiceWrapper::boxed),
         )
+        */
+        unimplemented!()
     }
 }
 
-#[pin_project]
-struct ServiceWrapper<T: Service>(#[pin] T);
+struct ServiceWrapper<T: Service>(T);
 
 impl<T> ServiceWrapper<T>
-    where
-        T: Service + 'static,
-        T::Future: 'static,
+where
+    T: Service + 'static,
+    T::Future: 'static,
 {
     fn boxed(service: T) -> BoxedService<T::Request, T::Response, T::Error> {
         Box::new(ServiceWrapper(service))
@@ -131,20 +131,23 @@ impl<T> ServiceWrapper<T>
 }
 
 impl<T, Req, Res, Err> Service for ServiceWrapper<T>
-    where
-        T: Service<Request=Req, Response=Res, Error=Err>,
-        T::Future: 'static,
+where
+    T: Service<Request = Req, Response = Res, Error = Err>,
+    T::Future: 'static,
 {
     type Request = Req;
     type Response = Res;
     type Error = Err;
     type Future = Either<
         Ready<Result<Self::Response, Self::Error>>,
-        Box<dyn Future<Output=Result<Self::Response, Self::Error>> + Unpin>,
+        LocalBoxFuture<'static, Result<Res, Err>>,
     >;
 
-    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.project_into().0.poll_ready(ctx)
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        ctx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
+        unimplemented!()
     }
 
     fn call(&mut self, req: Self::Request) -> Self::Future {
@@ -159,9 +162,9 @@ impl<T, Req, Res, Err> Service for ServiceWrapper<T>
     fn call(&mut self, req: Self::Request) -> Self::Future {
         let mut fut = self.0.call(req);
         match fut.poll() {
-            Ok(Poll::Ready(res)) => Either::A(ok(res)),
+            Ok(Async::Ready(res)) => Either::A(ok(res)),
             Err(e) => Either::A(err(e)),
-            Ok(Poll::Pending) => Either::B(Box::new(fut)),
+            Ok(Async::NotReady) => Either::B(Box::new(fut)),
         }
     }
     */

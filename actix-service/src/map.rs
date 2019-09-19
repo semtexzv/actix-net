@@ -58,7 +58,10 @@ where
     type Error = A::Error;
     type Future = MapFuture<A, F, Response>;
 
-    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        ctx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         self.project_into().service.poll_ready(ctx)
     }
 
@@ -93,16 +96,14 @@ where
     A: Service,
     F: FnMut(A::Response) -> Response,
 {
-
-
-    type Output = Result<Response,A::Error>;
+    type Output = Result<Response, A::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project_into();
         match this.fut.poll(cx) {
             Poll::Ready(Ok(resp)) => Poll::Ready(Ok((this.f)(resp))),
             Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-            Poll::Pending => Poll::Pending
+            Poll::Pending => Poll::Pending,
         }
     }
 }
@@ -187,18 +188,16 @@ where
     A: NewService,
     F: FnMut(A::Response) -> Res,
 {
-
-    type Output = Result<Map<A::Service, F, Res>,A::InitError>;
+    type Output = Result<Map<A::Service, F, Res>, A::InitError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project_into();
         if let Poll::Ready(svc) = this.fut.poll(cx)? {
-            Poll::Ready(Ok(Map::new(svc,this.f.take().unwrap())))
+            Poll::Ready(Ok(Map::new(svc, this.f.take().unwrap())))
         } else {
             Poll::Pending
         }
     }
-
 }
 
 #[cfg(test)]
@@ -215,7 +214,10 @@ mod tests {
         type Error = ();
         type Future = Ready<Result<(), ()>>;
 
-        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        fn poll_ready(
+            self: Pin<&mut Self>,
+            ctx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
 

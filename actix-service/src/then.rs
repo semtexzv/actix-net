@@ -5,7 +5,6 @@ use std::task::Context;
 use super::{IntoNewService, NewService, Service};
 use crate::cell::Cell;
 
-
 use pin_project::pin_project;
 
 /// Service for the `then` combinator, chaining a computation onto the end of
@@ -53,7 +52,10 @@ where
     type Error = B::Error;
     type Future = ThenFuture<A, B>;
 
-    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        ctx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         let this = self.project_into();
         let not_ready = !this.a.poll_ready(ctx)?.is_ready();
         if !this.b.get_pin().poll_ready(ctx)?.is_ready() || not_ready {
@@ -100,11 +102,9 @@ where
     A: Service,
     B: Service<Request = Result<A::Response, A::Error>>,
 {
-
-    type Output = Result<B::Response,B::Error>;
+    type Output = Result<B::Response, B::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-
         let this = self.project();
 
         let mut fut_a = this.fut_a;
@@ -114,7 +114,12 @@ where
             return fut.poll(cx);
         }
 
-        match fut_a.as_mut().as_pin_mut().expect("Bug in actix-service").poll(cx) {
+        match fut_a
+            .as_mut()
+            .as_pin_mut()
+            .expect("Bug in actix-service")
+            .poll(cx)
+        {
             Poll::Ready(r) => {
                 fut_a.set(None);
                 let new_fut = this.b.get_mut().call(r);
@@ -240,8 +245,7 @@ where
         InitError = A::InitError,
     >,
 {
-
-    type Output = Result<Then<A::Service,B::Service>,A::InitError>;
+    type Output = Result<Then<A::Service, B::Service>, A::InitError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project_into();
@@ -269,7 +273,7 @@ where
 #[cfg(test)]
 mod tests {
     use futures::future::{err, ok, Ready};
-    use futures::{ Future, Poll};
+    use futures::{Future, Poll};
     use std::cell::Cell;
     use std::rc::Rc;
 
@@ -285,14 +289,15 @@ mod tests {
         type Error = ();
         type Future = Ready<Result<Self::Response, Self::Error>>;
 
-
-        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        fn poll_ready(
+            self: Pin<&mut Self>,
+            ctx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
             let mut this = self.get_mut();
 
             this.0.set(this.0.get() + 1);
             Poll::Ready(Ok(()))
         }
-
 
         fn call(&mut self, req: Result<&'static str, &'static str>) -> Self::Future {
             match req {
@@ -310,12 +315,14 @@ mod tests {
         type Error = ();
         type Future = Ready<Result<Self::Response, ()>>;
 
-        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        fn poll_ready(
+            self: Pin<&mut Self>,
+            ctx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
             let mut this = self.get_mut();
             this.0.set(this.0.get() + 1);
             Poll::Ready(Err(()))
         }
-
 
         fn call(&mut self, req: Result<&'static str, ()>) -> Self::Future {
             match req {

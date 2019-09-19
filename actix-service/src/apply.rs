@@ -4,11 +4,10 @@ use futures::{ready, Future, Poll};
 
 use super::{IntoNewService, IntoService, NewService, Service};
 
-
+use crate::IntoFuture;
 use pin_project::pin_project;
 use std::pin::Pin;
 use std::task::Context;
-use crate::IntoFuture;
 
 /// Apply tranform function to a service
 pub fn apply_fn<T, F, In, Out, U>(service: U, f: F) -> Apply<T, F, In, Out>
@@ -90,7 +89,10 @@ where
     type Error = Out::Error;
     type Future = Out::Future;
 
-    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        ctx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(ready!(self.project_into().service.poll_ready(ctx)).map_err(|e| e.into()))
     }
 
@@ -106,7 +108,7 @@ where
 {
     service: T,
     f: F,
-    r: PhantomData<(In, Out,)>,
+    r: PhantomData<(In, Out)>,
 }
 
 impl<T, F, In, Out> ApplyNewService<T, F, In, Out>
@@ -202,12 +204,11 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project_into();
         if let Poll::Ready(svc) = this.fut.poll(cx)? {
-            Poll::Ready(Ok(Apply::new(svc,this.f.take().unwrap())))
+            Poll::Ready(Ok(Apply::new(svc, this.f.take().unwrap())))
         } else {
             Poll::Pending
         }
     }
-
 }
 
 #[cfg(test)]
@@ -227,11 +228,12 @@ mod tests {
         type Error = ();
         type Future = Ready<Result<(), ()>>;
 
-
-        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        fn poll_ready(
+            self: Pin<&mut Self>,
+            ctx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
-
 
         fn call(&mut self, _: ()) -> Self::Future {
             ok(())

@@ -1,14 +1,13 @@
+use futures::{Future, Poll};
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::task::Context;
-use futures::{Future, Poll};
 
 use super::{IntoNewService, IntoService, NewService, Service};
 use crate::cell::Cell;
 
-use pin_project::pin_project;
 use crate::IntoFuture;
-
+use pin_project::pin_project;
 
 /// `Apply` service combinator
 #[pin_project]
@@ -79,7 +78,10 @@ where
     type Error = A::Error;
     type Future = AndThenApplyFuture<A, B, F, Out>;
 
-    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        ctx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         let this = self.project_into();
         let not_ready = !this.a.poll_ready(ctx)?.is_ready();
         if !this.b.get_pin().poll_ready(ctx).is_ready() || not_ready {
@@ -87,9 +89,7 @@ where
         } else {
             Poll::Ready(Ok(()))
         }
-
     }
-
 
     fn call(&mut self, req: A::Request) -> Self::Future {
         AndThenApplyFuture {
@@ -134,13 +134,21 @@ where
             return fut.poll(cx).map_err(|e| e.into());
         }
 
-        match this.fut_a.as_mut().as_pin_mut().expect("Bug in actix-service").poll(cx)? {
+        match this
+            .fut_a
+            .as_mut()
+            .as_pin_mut()
+            .expect("Bug in actix-service")
+            .poll(cx)?
+        {
             Poll::Ready(resp) => {
                 this.fut_a.set(None);
-                this.fut_b.set(Some((&mut *this.f.get_mut())(resp, this.b.get_mut()).into_future()));
+                this.fut_b.set(Some(
+                    (&mut *this.f.get_mut())(resp, this.b.get_mut()).into_future(),
+                ));
                 self.poll(cx)
-            },
-            Poll::Pending => Poll::Pending
+            }
+            Poll::Pending => Poll::Pending,
         }
     }
 }
@@ -268,9 +276,7 @@ where
             Poll::Pending
         }
     }
-
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -291,7 +297,10 @@ mod tests {
         type Error = ();
         type Future = Ready<Result<(), ()>>;
 
-        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        fn poll_ready(
+            self: Pin<&mut Self>,
+            ctx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
 

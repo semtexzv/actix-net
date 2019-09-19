@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use futures::future::{ok, Ready};
 
 use crate::apply::Apply;
-use crate::{IntoTransform, Service, Transform, IntoFuture};
+use crate::{IntoFuture, IntoTransform, Service, Transform};
 
 /// Use function as transform service
 pub fn transform_fn<F, S, In, Out, Err>(
