@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use futures::task::{AtomicWaker};
+use futures::task::AtomicWaker;
 
 #[derive(Clone)]
 /// Simple counter with ability to notify task on reaching specific number

@@ -50,7 +50,7 @@ impl Server {
     }
 
     /// Resume accepting incoming connections
-    pub fn resume(&self)  -> impl Future<Output = Result<(),()>> {
+    pub fn resume(&self) -> impl Future<Output = Result<(), ()>> {
         let (tx, rx) = oneshot::channel();
         let _ = self.0.unbounded_send(ServerCommand::Resume(tx));
         rx.map_err(|_| ())
@@ -59,7 +59,7 @@ impl Server {
     /// Stop incoming connection processing, stop all workers and exit.
     ///
     /// If server starts with `spawn()` method, then spawned thread get terminated.
-    pub fn stop(&self, graceful: bool) -> impl Future<Output = Result<(),()>> {
+    pub fn stop(&self, graceful: bool) -> impl Future<Output = Result<(), ()>> {
         let (tx, rx) = oneshot::channel();
         let _ = self.0.unbounded_send(ServerCommand::Stop {
             graceful,
