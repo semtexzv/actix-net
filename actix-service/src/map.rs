@@ -203,7 +203,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use futures::future::{ok, FutureResult};
+    use futures::future::{ok, Ready};
 
     use super::*;
     use crate::{IntoNewService, Service, ServiceExt};
@@ -213,10 +213,10 @@ mod tests {
         type Request = ();
         type Response = ();
         type Error = ();
-        type Future = FutureResult<(), ()>;
+        type Future = Ready<Result<(), ()>>;
 
-        fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-            Ok(Async::Ready(()))
+        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
         }
 
         fn call(&mut self, _: ()) -> Self::Future {
@@ -229,7 +229,7 @@ mod tests {
         let mut srv = Srv.map(|_| "ok");
         let res = srv.poll_ready();
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), Async::Ready(()));
+        assert_eq!(res.unwrap(), Poll::Ready(()));
     }
 
     #[test]
@@ -237,17 +237,17 @@ mod tests {
         let mut srv = Srv.map(|_| "ok");
         let res = srv.call(()).poll();
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), Async::Ready("ok"));
+        assert_eq!(res.unwrap(), Poll::Ready("ok"));
     }
 
     #[test]
     fn test_new_service() {
         let blank = || Ok::<_, ()>(Srv);
         let new_srv = blank.into_new_service().map(|_| "ok");
-        if let Async::Ready(mut srv) = new_srv.new_service(&()).poll().unwrap() {
+        if let Poll::Ready(mut srv) = new_srv.new_service(&()).poll().unwrap() {
             let res = srv.call(()).poll();
             assert!(res.is_ok());
-            assert_eq!(res.unwrap(), Async::Ready("ok"));
+            assert_eq!(res.unwrap(), Poll::Ready("ok"));
         } else {
             panic!()
         }

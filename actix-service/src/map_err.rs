@@ -7,7 +7,6 @@ use super::{NewService, Service};
 use pin_project::pin_project;
 use std::pin::Pin;
 use std::task::Context;
-use futures::future::Ready;
 
 /// Service for the `map_err` combinator, changing the type of a service's
 /// error.
@@ -205,7 +204,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use futures::future::{err, FutureResult};
+    use futures::future::{err, Ready};
 
     use super::*;
     use crate::{IntoNewService, NewService, Service, ServiceExt};
@@ -216,10 +215,10 @@ mod tests {
         type Request = ();
         type Response = ();
         type Error = ();
-        type Future = FutureResult<(), ()>;
+        type Future = Ready<Result<(), ()>>;
 
-        fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-            Err(())
+        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Err(()))
         }
 
         fn call(&mut self, _: ()) -> Self::Future {
@@ -247,7 +246,7 @@ mod tests {
     fn test_new_service() {
         let blank = || Ok::<_, ()>(Srv);
         let new_srv = blank.into_new_service().map_err(|_| "error");
-        if let Async::Ready(mut srv) = new_srv.new_service(&()).poll().unwrap() {
+        if let Poll::Ready(mut srv) = new_srv.new_service(&()).poll().unwrap() {
             let res = srv.call(()).poll();
             assert!(res.is_err());
             assert_eq!(res.err().unwrap(), "error");

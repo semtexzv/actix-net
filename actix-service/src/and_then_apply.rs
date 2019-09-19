@@ -105,7 +105,7 @@ where
 
     type Output = Result<AndThen<FromErr<A::Service, T::Error>, T::Transform>,T::InitError>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project_into();
 
         if this.fut_t.is_none() {
@@ -142,30 +142,30 @@ where
     /*
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         if self.fut_t.is_none() {
-            if let Async::Ready(service) = self.fut_b.poll()? {
+            if let Poll::Ready(service) = self.fut_b.poll()? {
                 self.fut_t = Some(self.t_cell.new_transform(service));
             }
         }
 
         if self.a.is_none() {
-            if let Async::Ready(service) = self.fut_a.poll()? {
+            if let Poll::Ready(service) = self.fut_a.poll()? {
                 self.a = Some(service);
             }
         }
 
         if let Some(ref mut fut) = self.fut_t {
-            if let Async::Ready(transform) = fut.poll()? {
+            if let Poll::Ready(transform) = fut.poll()? {
                 self.t = Some(transform);
             }
         }
 
         if self.a.is_some() && self.t.is_some() {
-            Ok(Async::Ready(AndThen::new(
+            Ok(Poll::Ready(AndThen::new(
                 FromErr::new(self.a.take().unwrap()),
                 self.t.take().unwrap(),
             )))
         } else {
-            Ok(Async::NotReady)
+            Ok(Poll::Pending)
         }
     }
     */
@@ -173,10 +173,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use futures::future::{ok, FutureResult};
-    use futures::{Async, Future, Poll};
+    use futures::future::{ok, Ready};
+    use futures::{Future, Poll};
 
     use crate::{IntoNewService, IntoService, NewService, Service, ServiceExt};
+    use std::pin::Pin;
+    use std::task::Context;
 
     #[derive(Clone)]
     struct Srv;
@@ -184,10 +186,10 @@ mod tests {
         type Request = ();
         type Response = ();
         type Error = ();
-        type Future = FutureResult<(), ()>;
+        type Future = Ready<Result<(), ()>>;
 
-        fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-            Ok(Async::Ready(()))
+        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Err(()))
         }
 
         fn call(&mut self, _: ()) -> Self::Future {
@@ -207,7 +209,7 @@ mod tests {
         assert!(srv.poll_ready().is_ok());
         let res = srv.call("srv").poll();
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), Async::Ready(("srv", ())));
+        assert_eq!(res.unwrap(), Poll::Ready(("srv", ())));
     }
 
     #[test]
@@ -218,11 +220,11 @@ mod tests {
             |req: &'static str, srv: &mut Srv| srv.call(()).map(move |res| (req, res)),
             || Ok(Srv),
         );
-        if let Async::Ready(mut srv) = new_srv.new_service(&()).poll().unwrap() {
+        if let Poll::Ready(mut srv) = new_srv.new_service(&()).poll().unwrap() {
             assert!(srv.poll_ready().is_ok());
             let res = srv.call("srv").poll();
             assert!(res.is_ok());
-            assert_eq!(res.unwrap(), Async::Ready(("srv", ())));
+            assert_eq!(res.unwrap(), Poll::Ready(("srv", ())));
         } else {
             panic!()
         }

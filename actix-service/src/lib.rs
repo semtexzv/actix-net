@@ -1,4 +1,4 @@
-use std::cell::{RefCell};
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -13,14 +13,16 @@ mod cell;
 mod and_then;
 mod and_then_apply;
 mod and_then_apply_fn;
-/*
 mod apply;
 mod apply_cfg;
 pub mod blank;
+/*
 pub mod boxed;
-mod fn_service;
-mod fn_transform;
 */
+mod fn_service;
+
+mod fn_transform;
+
 mod from_err;
 mod map;
 mod map_config;
@@ -31,26 +33,27 @@ mod transform;
 mod transform_err;
 
 pub use self::and_then::{AndThen, AndThenNewService};
-/*
+
 pub use self::apply::{apply_fn, new_apply_fn, Apply, ApplyNewService};
 pub use self::apply_cfg::{apply_cfg, new_apply_cfg};
 pub use self::fn_service::{new_service_cfg, new_service_fn, service_fn, ServiceFn};
 pub use self::fn_transform::transform_fn;
-*/
 pub use self::from_err::{FromErr, FromErrNewService};
 pub use self::map::{Map, MapNewService};
-/*
 pub use self::map_config::{MapConfig, MappedConfig, UnitConfig};
 pub use self::map_err::{MapErr, MapErrNewService};
 pub use self::map_init_err::MapInitErr;
 pub use self::then::{Then, ThenNewService};
-*/
 pub use self::transform::{apply_transform, IntoTransform, Transform};
-
-/*
 use self::and_then_apply::AndThenTransform;
 use self::and_then_apply_fn::{AndThenApply, AndThenApplyNewService};
-*/
+
+pub trait IntoFuture {
+    type Item;
+    type Error;
+    type Future: Future<Output=Result<Self::Item, Self::Error>>;
+    fn into_future(self) -> Self::Future;
+}
 
 /// An asynchronous function from `Request` to a `Response`.
 pub trait Service {
@@ -64,7 +67,7 @@ pub trait Service {
     type Error;
 
     /// The future response value.
-    type Future: Future<Output = Result<Self::Response, Self::Error>>;
+    type Future: Future<Output=Result<Self::Response, Self::Error>>;
 
     /// Returns `Ready` when the service is able to process requests.
     ///
@@ -75,7 +78,7 @@ pub trait Service {
     /// This is a **best effort** implementation. False positives are permitted.
     /// It is permitted for the service to return `Ready` from a `poll_ready`
     /// call and the next invocation of `call` results in an error.
-    fn poll_ready(self : Pin<&mut Self>, ctx: &mut task::Context<'_>) -> Poll<Result<(),Self::Error>>;
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut task::Context<'_>) -> Poll<Result<(), Self::Error>>;
 
     /// Process the request and return the response asynchronously.
     ///
@@ -92,7 +95,7 @@ pub trait Service {
 /// An extension trait for `Service`s that provides a variety of convenient
 /// adapters
 pub trait ServiceExt: Service {
-    /*
+
     /// Apply function to specified service and use it as a next service in
     /// chain.
     fn apply_fn<F, B, B1, Out>(self, service: B1, f: F) -> AndThenApply<Self, B, F, Out>
@@ -106,7 +109,7 @@ pub trait ServiceExt: Service {
     {
         AndThenApply::new(self, service, f)
     }
-    */
+
 
     /// Call another service after call to this one has resolved successfully.
     ///
@@ -118,15 +121,15 @@ pub trait ServiceExt: Service {
     /// Note that this function consumes the receiving service and returns a
     /// wrapped version of it.
     fn and_then<F, B>(self, service: F) -> AndThen<Self, B>
-    where
-        Self: Sized,
-        F: IntoService<B>,
-        B: Service<Request = Self::Response, Error = Self::Error>,
+        where
+            Self: Sized,
+            F: IntoService<B>,
+            B: Service<Request=Self::Response, Error=Self::Error>,
     {
         AndThen::new(self, service.into_service())
     }
 
-    /*
+
     /// Map this service's error to any error implementing `From` for
     /// this service`s `Error`.
     ///
@@ -185,7 +188,7 @@ pub trait ServiceExt: Service {
     {
         MapErr::new(self, f)
     }
-    */
+
 }
 
 impl<T: ?Sized> ServiceExt for T where T: Service {}
@@ -214,9 +217,9 @@ pub trait NewService {
 
     /// The `Service` value created by this factory
     type Service: Service<
-        Request = Self::Request,
-        Response = Self::Response,
-        Error = Self::Error,
+        Request=Self::Request,
+        Response=Self::Response,
+        Error=Self::Error,
     >;
 
     /// Errors produced while building a service.
@@ -228,7 +231,7 @@ pub trait NewService {
     /// Create and return a new service value asynchronously.
     fn new_service(&self, cfg: &Self::Config) -> Self::Future;
 
-    /*
+
     /// Apply transform service to specified service and use it as a next service in
     /// chain.
     fn apply<T, T1, B, B1>(self, transform: T1, service: B1) -> AndThenTransform<T, Self, B>
@@ -350,12 +353,12 @@ pub trait NewService {
     {
         UnitConfig::new(self)
     }
-    */
+
 }
 
 impl<'a, S> Service for &'a mut S
-where
-    S: Service + 'a,
+    where
+        S: Service + 'a,
 {
     type Request = S::Request;
     type Response = S::Response;
@@ -364,7 +367,6 @@ where
 
     fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         unsafe { self.map_unchecked_mut(|s| &mut **s).poll_ready(ctx) }
-
     }
 
 
@@ -374,15 +376,15 @@ where
 }
 
 impl<S> Service for Box<S>
-where
-    S: Service + ?Sized,
+    where
+        S: Service + ?Sized,
 {
     type Request = S::Request;
     type Response = S::Response;
     type Error = S::Error;
     type Future = S::Future;
 
-    fn poll_ready(mut self : Pin<&mut Self>, ctx : &mut Context<'_>) -> Poll<Result<(), S::Error>> {
+    fn poll_ready(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), S::Error>> {
         unsafe {
             let p: &mut S = Pin::as_mut(&mut self).get_mut();
             Pin::new_unchecked(p).poll_ready(ctx)
@@ -395,8 +397,8 @@ where
 }
 
 impl<S> Service for Rc<RefCell<S>>
-where
-    S: Service,
+    where
+        S: Service,
 {
     type Request = S::Request;
     type Response = S::Response;
@@ -408,7 +410,6 @@ where
             let r = self.get_unchecked_mut();
             Pin::new_unchecked(&mut (*(**r).borrow_mut())).poll_ready(ctx)
         }
-
     }
 
 
@@ -418,8 +419,8 @@ where
 }
 
 impl<S> NewService for Rc<S>
-where
-    S: NewService,
+    where
+        S: NewService,
 {
     type Request = S::Request;
     type Response = S::Response;
@@ -435,8 +436,8 @@ where
 }
 
 impl<S> NewService for Arc<S>
-where
-    S: NewService,
+    where
+        S: NewService,
 {
     type Request = S::Request;
     type Response = S::Response;
@@ -453,8 +454,8 @@ where
 
 /// Trait for types that can be converted to a `Service`
 pub trait IntoService<T>
-where
-    T: Service,
+    where
+        T: Service,
 {
     /// Convert to a `Service`
     fn into_service(self) -> T;
@@ -462,16 +463,16 @@ where
 
 /// Trait for types that can be converted to a `NewService`
 pub trait IntoNewService<T>
-where
-    T: NewService,
+    where
+        T: NewService,
 {
     /// Convert to an `NewService`
     fn into_new_service(self) -> T;
 }
 
 impl<T> IntoService<T> for T
-where
-    T: Service,
+    where
+        T: Service,
 {
     fn into_service(self) -> T {
         self
@@ -479,8 +480,8 @@ where
 }
 
 impl<T> IntoNewService<T> for T
-where
-    T: NewService,
+    where
+        T: NewService,
 {
     fn into_new_service(self) -> T {
         self

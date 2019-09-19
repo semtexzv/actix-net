@@ -300,6 +300,7 @@ mod tests {
 
     #[test]
     fn test_poll_ready() {
+        
         let cnt = Rc::new(Cell::new(0));
         let mut srv = Srv1(cnt.clone()).and_then(Srv2(cnt.clone()));
         let res = srv.poll_ready();
