@@ -43,8 +43,8 @@ impl ServiceConfig {
 
     /// Add new service to server
     pub fn bind<U, N: AsRef<str>>(&mut self, name: N, addr: U) -> io::Result<&mut Self>
-        where
-            U: net::ToSocketAddrs,
+    where
+        U: net::ToSocketAddrs,
     {
         let sockets = bind_addr(addr, self.backlog)?;
 
@@ -67,8 +67,8 @@ impl ServiceConfig {
     /// Register service configuration function. This function get called
     /// during worker runtime configuration. It get executed in worker thread.
     pub fn apply<F>(&mut self, f: F) -> io::Result<()>
-        where
-            F: Fn(&mut ServiceRuntime) + Send + Clone + 'static,
+    where
+        F: Fn(&mut ServiceRuntime) + Send + Clone + 'static,
     {
         self.apply = Some(Box::new(f));
         Ok(())
@@ -163,8 +163,8 @@ pub(super) trait ServiceRuntimeConfiguration: Send {
 }
 
 impl<F> ServiceRuntimeConfiguration for F
-    where
-        F: Fn(&mut ServiceRuntime) + Send + Clone + 'static,
+where
+    F: Fn(&mut ServiceRuntime) + Send + Clone + 'static,
 {
     fn clone(&self) -> Box<dyn ServiceRuntimeConfiguration> {
         Box::new(self.clone())
@@ -182,7 +182,7 @@ fn not_configured(_: &mut ServiceRuntime) {
 pub struct ServiceRuntime {
     names: HashMap<String, Token>,
     services: HashMap<Token, BoxedNewService>,
-    onstart: Vec<Box<dyn Future<Output=Result<(), ()>>>>,
+    onstart: Vec<Box<dyn Future<Output = Result<(), ()>>>>,
 }
 
 impl ServiceRuntime {
@@ -207,12 +207,12 @@ impl ServiceRuntime {
     /// Name of the service must be registered during configuration stage with
     /// *ServiceConfig::bind()* or *ServiceConfig::listen()* methods.
     pub fn service<T, F>(&mut self, name: &str, service: F)
-        where
-            F: IntoNewService<T>,
-            T: NewService<Config=ServerConfig, Request=Io<TcpStream>> + 'static,
-            T::Future: 'static,
-            T::Service: 'static,
-            T::InitError: fmt::Debug,
+    where
+        F: IntoNewService<T>,
+        T: NewService<Config = ServerConfig, Request = Io<TcpStream>> + 'static,
+        T::Future: 'static,
+        T::Service: 'static,
+        T::InitError: fmt::Debug,
     {
         // let name = name.to_owned();
         if let Some(token) = self.names.get(name) {
@@ -229,8 +229,8 @@ impl ServiceRuntime {
 
     /// Execute future before services initialization.
     pub fn on_start<F>(&mut self, fut: F)
-        where
-            F: Future<Output=()> + 'static,
+    where
+        F: Future<Output = ()> + 'static,
     {
         self.onstart.push(Box::new(fut))
     }
@@ -238,13 +238,13 @@ impl ServiceRuntime {
 
 type BoxedNewService = Box<
     dyn NewService<
-        Request=(Option<CounterGuard>, ServerMessage),
-        Response=(),
-        Error=(),
-        InitError=(),
-        Config=ServerConfig,
-        Service=BoxedServerService,
-        Future=Box<dyn Future<Output=Result<BoxedServerService, ()>>>,
+        Request = (Option<CounterGuard>, ServerMessage),
+        Response = (),
+        Error = (),
+        InitError = (),
+        Config = ServerConfig,
+        Service = BoxedServerService,
+        Future = Box<dyn Future<Output = Result<BoxedServerService, ()>>>,
     >,
 >;
 
@@ -253,12 +253,12 @@ struct ServiceFactory<T> {
 }
 
 impl<T> NewService for ServiceFactory<T>
-    where
-        T: NewService<Config=ServerConfig, Request=Io<TcpStream>>,
-        T::Future: 'static,
-        T::Service: 'static,
-        T::Error: 'static,
-        T::InitError: fmt::Debug + 'static,
+where
+    T: NewService<Config = ServerConfig, Request = Io<TcpStream>>,
+    T::Future: 'static,
+    T::Service: 'static,
+    T::Error: 'static,
+    T::InitError: fmt::Debug + 'static,
 {
     type Request = (Option<CounterGuard>, ServerMessage);
     type Response = ();

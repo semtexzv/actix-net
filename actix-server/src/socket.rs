@@ -4,7 +4,6 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_net::driver::Handle;
 use tokio_net::tcp::TcpStream;
 
-
 pub(crate) enum StdListener {
     Tcp(net::TcpListener),
     #[cfg(all(unix, feature = "uds"))]

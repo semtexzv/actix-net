@@ -2,9 +2,9 @@ use std::time::Duration;
 use std::{io, mem, net};
 
 use actix_rt::{spawn, Arbiter, System};
+use futures::channel::mpsc::{unbounded, UnboundedReceiver};
 use futures::future::{lazy, ok};
 use futures::stream::futures_unordered;
-use futures::channel::mpsc::{unbounded, UnboundedReceiver};
 use futures::{Future, Poll, Stream};
 use log::{error, info};
 use net2::TcpBuilder;

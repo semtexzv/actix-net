@@ -3,9 +3,8 @@ use std::net::SocketAddr;
 use std::rc::Rc;
 use std::{fmt, io, net, time};
 
-use tokio::io::{AsyncRead,AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::tcp::TcpStream;
-
 
 #[derive(Debug, Clone)]
 pub struct ServerConfig {

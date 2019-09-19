@@ -5,9 +5,9 @@ use futures::stream::futures_unordered;
 use futures::{Future, Poll, Stream, TryStream};
 
 use crate::server::Server;
+use futures::future::LocalBoxFuture;
 use std::pin::Pin;
 use std::task::Context;
-use futures::future::LocalBoxFuture;
 
 /// Different types of process signals
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -49,37 +49,39 @@ impl Signals {
             {
                 use tokio_net::signal::unix;
 
-                let mut sigs: Vec<LocalBoxFuture<'static, Result<SigStream,io::Error>>> = 
+                let mut sigs: Vec<LocalBoxFuture<'static, Result<SigStream, io::Error>>> =
                     Vec::new();
                 sigs.push(Box::new(
-                    tokio_net::signal::unix::Signal::new(tokio_net::signal::unix::libc::SIGINT).map(|stream| {
-                        let s: SigStream = Box::new(stream.map(|_| Signal::Int));
+                    tokio_net::signal::unix::Signal::new(tokio_net::signal::unix::libc::SIGINT)
+                        .map(|stream| {
+                            let s: SigStream = Box::new(stream.map(|_| Signal::Int));
+                            s
+                        }),
+                ));
+                sigs.push(Box::new(
+                    tokio_net::signal::unix::Signal::new(tokio_net::signal::unix::libc::SIGHUP)
+                        .map(|stream: unix::Signal| {
+                            let s: SigStream = Box::new(stream.map(|_| Signal::Hup));
+                            s
+                        }),
+                ));
+                sigs.push(Box::new(
+                    tokio_net::signal::unix::Signal::new(
+                        tokio_net::signal::unix::libc::SIGTERM,
+                    )
+                    .map(|stream| {
+                        let s: SigStream = Box::new(stream.map(|_| Signal::Term));
                         s
                     }),
                 ));
                 sigs.push(Box::new(
-                    tokio_net::signal::unix::Signal::new(tokio_net::signal::unix::libc::SIGHUP).map(
-                        |stream: unix::Signal| {
-                            let s: SigStream = Box::new(stream.map(|_| Signal::Hup));
-                            s
-                        },
-                    ),
-                ));
-                sigs.push(Box::new(
-                    tokio_net::signal::unix::Signal::new(tokio_net::signal::unix::libc::SIGTERM).map(
-                        |stream| {
-                            let s: SigStream = Box::new(stream.map(|_| Signal::Term));
-                            s
-                        },
-                    ),
-                ));
-                sigs.push(Box::new(
-                    tokio_net::signal::unix::Signal::new(tokio_net::signal::unix::libc::SIGQUIT).map(
-                        |stream| {
-                            let s: SigStream = Box::new(stream.map(|_| Signal::Quit));
-                            s
-                        },
-                    ),
+                    tokio_net::signal::unix::Signal::new(
+                        tokio_net::signal::unix::libc::SIGQUIT,
+                    )
+                    .map(|stream| {
+                        let s: SigStream = Box::new(stream.map(|_| Signal::Quit));
+                        s
+                    }),
                 ));
                 futures_unordered(sigs)
                     .collect()

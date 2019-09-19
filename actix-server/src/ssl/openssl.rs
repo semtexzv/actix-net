@@ -9,8 +9,8 @@ use tokio_openssl::{AcceptAsync, SslAcceptorExt, SslStream};
 use crate::counter::{Counter, CounterGuard};
 use crate::ssl::MAX_CONN_COUNTER;
 use crate::{Io, Protocol, ServerConfig};
-use std::task::Context;
 use std::pin::Pin;
+use std::task::Context;
 
 /// Support `SSL` connections via openssl package
 ///
@@ -73,7 +73,10 @@ impl<T: AsyncRead + AsyncWrite, P> Service for OpensslAcceptorService<T, P> {
     type Error = HandshakeError<T>;
     type Future = OpensslAcceptorServiceFut<T, P>;
 
-    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        ctx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         unimplemented!()
     }
 
@@ -87,7 +90,6 @@ impl<T: AsyncRead + AsyncWrite, P> Service for OpensslAcceptorService<T, P> {
     }
     */
 
-
     fn call(&mut self, req: Self::Request) -> Self::Future {
         let (io, params, _) = req.into_parts();
         OpensslAcceptorServiceFut {
@@ -99,8 +101,8 @@ impl<T: AsyncRead + AsyncWrite, P> Service for OpensslAcceptorService<T, P> {
 }
 
 pub struct OpensslAcceptorServiceFut<T, P>
-    where
-        T: AsyncRead + AsyncWrite,
+where
+    T: AsyncRead + AsyncWrite,
 {
     fut: AcceptAsync<T>,
     params: Option<P>,

@@ -1,12 +1,12 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::{mem, time, task};
+use std::{mem, task, time};
 
 use actix_rt::{spawn, Arbiter};
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::channel::oneshot;
-use futures::{future, Future, Poll, Stream, TryFutureExt};
 use futures::FutureExt;
+use futures::{future, Future, Poll, Stream, TryFutureExt};
 use log::{error, info, trace};
 use tokio_timer::{sleep, Delay};
 
@@ -201,7 +201,11 @@ impl Worker {
         }
     }
 
-    fn check_readiness(&mut self, trace: bool, cx : &mut Context<'_>) -> Result<bool, (Token, usize)> {
+    fn check_readiness(
+        &mut self,
+        trace: bool,
+        cx: &mut Context<'_>,
+    ) -> Result<bool, (Token, usize)> {
         /*
         let mut ready = self.conns.available();
         let mut failed = None;
@@ -243,14 +247,12 @@ enum WorkerState {
     Restarting(
         usize,
         Token,
-        Box<dyn Future<Output=Result<Vec<(Token, BoxedServerService)>, ()>>>,
+        Box<dyn Future<Output = Result<Vec<(Token, BoxedServerService)>, ()>>>,
     ),
     Shutdown(Delay, Delay, oneshot::Sender<bool>),
 }
 
 impl Future for Worker {
-
-
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
