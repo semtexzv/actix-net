@@ -272,7 +272,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use futures::future::{err, ok, Ready};
+    use futures::future::{err, ok, ready, Ready};
     use futures::{Future, Poll};
     use std::cell::Cell;
     use std::rc::Rc;
@@ -283,6 +283,7 @@ mod tests {
 
     #[derive(Clone)]
     struct Srv1(Rc<Cell<usize>>);
+
     impl Service for Srv1 {
         type Request = Result<&'static str, &'static str>;
         type Response = &'static str;
@@ -355,24 +356,21 @@ mod tests {
         assert_eq!(res.unwrap(), (("srv2", "err")));
     }
 
-    /*
-    #[test]
-    fn test_new_service() {
+    #[tokio::test]
+    async fn test_new_service() {
         let cnt = Rc::new(Cell::new(0));
         let cnt2 = cnt.clone();
-        let blank = move || Ok::<_, ()>(Srv1(cnt2.clone()));
-        let new_srv = blank.into_new_service().then(move || Ok(Srv2(cnt.clone())));
-        if let Poll::Ready(mut srv) = new_srv.clone().new_service(&()).poll().unwrap() {
-            let res = srv.call(Ok("srv1")).poll();
-            assert!(res.is_ok());
-            assert_eq!(res.unwrap(), Poll::Ready(("srv1", "ok")));
+        let blank = move || ready(Ok::<_, ()>(Srv1(cnt2.clone())));
+        let new_srv = blank
+            .into_new_service()
+            .then(move || ready(Ok(Srv2(cnt.clone()))));
+        let mut srv = new_srv.clone().new_service(&()).await.unwrap();
+        let res = srv.call(Ok("srv1")).await;
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), (("srv1", "ok")));
 
-            let res = srv.call(Err("srv")).poll();
-            assert!(res.is_ok());
-            assert_eq!(res.unwrap(), Poll::Ready(("srv2", "err")));
-        } else {
-            panic!()
-        }
+        let res = srv.call(Err("srv")).await;
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), (("srv2", "err")));
     }
-    */
 }

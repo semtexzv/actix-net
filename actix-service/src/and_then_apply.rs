@@ -169,8 +169,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use futures::future::{ok, Ready};
-    use futures::{Future, Poll};
+    use futures::future::{ok, ready, Ready};
+    use futures::{Future, FutureExt, Poll, TryFutureExt};
 
     use crate::{IntoNewService, IntoService, NewService, Service, ServiceExt};
     use std::pin::Pin;
@@ -178,6 +178,7 @@ mod tests {
 
     #[derive(Clone)]
     struct Srv;
+
     impl Service for Srv {
         type Request = ();
         type Response = ();
@@ -196,40 +197,35 @@ mod tests {
         }
     }
 
-    /*
-    #[test]
-    fn test_apply() {
-        let blank = |req| Ok(req);
+    #[tokio::test]
+    async fn test_apply() {
+        let blank = |req| ready(Ok(req));
 
         let mut srv = blank
             .into_service()
             .apply_fn(Srv, |req: &'static str, srv: &mut Srv| {
-                srv.call(()).map(move |res| (req, res))
+                srv.call(()).map_ok(move |res| (req, res))
             });
-        assert!(srv.poll_ready().is_ok());
-        let res = srv.call("srv").poll();
+        let res = srv.call("srv").await;
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), Poll::Ready(("srv", ())));
+        assert_eq!(res.unwrap(), (("srv", ())));
     }
-    */
 
-    /*
-    #[test]
-    fn test_new_service() {
-        let blank = || Ok::<_, ()>((|req| Ok(req)).into_service());
+    #[tokio::test]
+    async fn test_new_service() {
+        //let blank = || Ok::<_, ()>((|req| Ok(req)).into_service());\
+
+        let blank = move || ok::<_, ()>((|req| ok(req)).into_service());
+        //let blank = ok((|req| ok(req)).into_service());
 
         let new_srv = blank.into_new_service().apply(
-            |req: &'static str, srv: &mut Srv| srv.call(()).map(move |res| (req, res)),
-            || Ok(Srv),
+            |req: &'static str, srv: &mut Srv| srv.call(()).map_ok(move |res| (req, res)),
+            || ok(Srv),
         );
-        if let Poll::Ready(mut srv) = new_srv.new_service(&()).poll().unwrap() {
-            assert!(srv.poll_ready().is_ok());
-            let res = srv.call("srv").poll();
-            assert!(res.is_ok());
-            assert_eq!(res.unwrap(), Poll::Ready(("srv", ())));
-        } else {
-            panic!()
-        }
+        let mut srv = new_srv.new_service(&()).await.unwrap();
+
+        let res = srv.call("srv").await;
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), (("srv", ())));
     }
-    */
 }
