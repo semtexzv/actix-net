@@ -89,7 +89,6 @@ where
         let this = self.project_into();
         this.fut.poll(cx).map_err(this.f)
     }
-
 }
 
 /// Transform for the `from_err` combinator, changing the type of a new

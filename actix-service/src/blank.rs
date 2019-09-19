@@ -38,7 +38,10 @@ impl<R, E> Service for Blank<R, E> {
     type Error = E;
     type Future = Ready<Result<R, E>>;
 
-    fn poll_ready(self: Pin<&mut Self>, _ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        _ctx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 

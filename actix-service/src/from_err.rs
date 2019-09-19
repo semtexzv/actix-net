@@ -20,9 +20,9 @@ pub struct FromErr<A, E> {
 
 impl<A, E> FromErr<A, E> {
     pub(crate) fn new(service: A) -> Self
-        where
-            A: Service,
-            E: From<A::Error>,
+    where
+        A: Service,
+        E: From<A::Error>,
     {
         FromErr {
             service,
@@ -32,8 +32,8 @@ impl<A, E> FromErr<A, E> {
 }
 
 impl<A, E> Clone for FromErr<A, E>
-    where
-        A: Clone,
+where
+    A: Clone,
 {
     fn clone(&self) -> Self {
         FromErr {
@@ -44,16 +44,19 @@ impl<A, E> Clone for FromErr<A, E>
 }
 
 impl<A, E> Service for FromErr<A, E>
-    where
-        A: Service,
-        E: From<A::Error>,
+where
+    A: Service,
+    E: From<A::Error>,
 {
     type Request = A::Request;
     type Response = A::Response;
     type Error = E;
     type Future = FromErrFuture<A, E>;
 
-    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        self: Pin<&mut Self>,
+        ctx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         self.project_into().service.poll_ready(ctx).map_err(E::from)
     }
 
@@ -73,9 +76,9 @@ pub struct FromErrFuture<A: Service, E> {
 }
 
 impl<A, E> Future for FromErrFuture<A, E>
-    where
-        A: Service,
-        E: From<A::Error>,
+where
+    A: Service,
+    E: From<A::Error>,
 {
     type Output = Result<A::Response, E>;
 
@@ -96,17 +99,17 @@ pub struct FromErrNewService<A, E> {
 impl<A, E> FromErrNewService<A, E> {
     /// Create new `FromErr` new service instance
     pub fn new(a: A) -> Self
-        where
-            A: NewService,
-            E: From<A::Error>,
+    where
+        A: NewService,
+        E: From<A::Error>,
     {
         Self { a, e: PhantomData }
     }
 }
 
 impl<A, E> Clone for FromErrNewService<A, E>
-    where
-        A: Clone,
+where
+    A: Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -117,9 +120,9 @@ impl<A, E> Clone for FromErrNewService<A, E>
 }
 
 impl<A, E> NewService for FromErrNewService<A, E>
-    where
-        A: NewService,
-        E: From<A::Error>,
+where
+    A: NewService,
+    E: From<A::Error>,
 {
     type Request = A::Request;
     type Response = A::Response;
@@ -140,9 +143,9 @@ impl<A, E> NewService for FromErrNewService<A, E>
 
 #[pin_project]
 pub struct FromErrNewServiceFuture<A, E>
-    where
-        A: NewService,
-        E: From<A::Error>,
+where
+    A: NewService,
+    E: From<A::Error>,
 {
     #[pin]
     fut: A::Future,
@@ -150,9 +153,9 @@ pub struct FromErrNewServiceFuture<A, E>
 }
 
 impl<A, E> Future for FromErrNewServiceFuture<A, E>
-    where
-        A: NewService,
-        E: From<A::Error>,
+where
+    A: NewService,
+    E: From<A::Error>,
 {
     type Output = Result<FromErr<A::Service, E>, A::InitError>;
 
@@ -165,14 +168,14 @@ impl<A, E> Future for FromErrNewServiceFuture<A, E>
     }
 
     /*
-        fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-            if let Poll::Ready(service) = self.fut.poll()? {
-                Ok(Poll::Ready(FromErr::new(service)))
-            } else {
-                Ok(Poll::Pending)
-            }
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        if let Poll::Ready(service) = self.fut.poll()? {
+            Ok(Poll::Ready(FromErr::new(service)))
+        } else {
+            Ok(Poll::Pending)
         }
-        */
+    }
+    */
 }
 
 #[cfg(test)]
@@ -190,10 +193,12 @@ mod tests {
         type Error = ();
         type Future = Ready<Result<(), ()>>;
 
-        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        fn poll_ready(
+            self: Pin<&mut Self>,
+            ctx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Err(()))
         }
-
 
         fn call(&mut self, _: ()) -> Self::Future {
             err(())

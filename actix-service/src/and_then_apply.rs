@@ -7,8 +7,8 @@ use crate::from_err::FromErr;
 use crate::{NewService, Transform};
 
 use pin_project::pin_project;
-use std::task::Context;
 use std::pin::Pin;
+use std::task::Context;
 
 /// `Apply` new service combinator
 pub struct AndThenTransform<T, A, B> {
@@ -102,8 +102,7 @@ where
     T: Transform<B::Service, Request = A::Response, InitError = A::InitError>,
     T::Error: From<A::Error>,
 {
-
-    type Output = Result<AndThen<FromErr<A::Service, T::Error>, T::Transform>,T::InitError>;
+    type Output = Result<AndThen<FromErr<A::Service, T::Error>, T::Transform>, T::InitError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project_into();
@@ -134,10 +133,7 @@ where
         } else {
             Poll::Pending
         }
-
     }
-
-
 
     /*
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -188,7 +184,10 @@ mod tests {
         type Error = ();
         type Future = Ready<Result<(), ()>>;
 
-        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        fn poll_ready(
+            self: Pin<&mut Self>,
+            ctx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Err(()))
         }
 

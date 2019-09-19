@@ -59,7 +59,10 @@ where
     type Error = E;
     type Future = MapErrFuture<A, F, E>;
 
-    fn poll_ready(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        mut self: Pin<&mut Self>,
+        ctx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         self.project().service.poll_ready(ctx).map_err(&self.f)
     }
 
@@ -94,12 +97,11 @@ where
     A: Service,
     F: Fn(A::Error) -> E,
 {
-    type Output = Result<A::Response,E>;
+    type Output = Result<A::Response, E>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.project().fut.poll(cx).map_err(&self.f)
     }
-
 }
 
 /// NewService for the `map_err` combinator, changing the type of a new
@@ -189,17 +191,16 @@ where
     A: NewService,
     F: Fn(A::Error) -> E + Clone,
 {
-    type Output = Result<MapErr<A::Service,F,E>,A::InitError>;
+    type Output = Result<MapErr<A::Service, F, E>, A::InitError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project_into();
-        if let Poll::Ready(svc) =  this.fut.poll(cx)? {
-            Poll::Ready(Ok(MapErr::new(svc,this.f.clone())))
+        if let Poll::Ready(svc) = this.fut.poll(cx)? {
+            Poll::Ready(Ok(MapErr::new(svc, this.f.clone())))
         } else {
             Poll::Pending
         }
     }
-
 }
 
 #[cfg(test)]
@@ -217,7 +218,10 @@ mod tests {
         type Error = ();
         type Future = Ready<Result<(), ()>>;
 
-        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        fn poll_ready(
+            self: Pin<&mut Self>,
+            ctx: &mut Context<'_>,
+        ) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Err(()))
         }
 

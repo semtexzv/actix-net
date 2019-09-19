@@ -1,9 +1,9 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
-use futures::{Future, Poll};
 use crate::transform_err::{TransformFromErr, TransformMapInitErr};
 use crate::{IntoNewService, NewService, Service};
+use futures::{Future, Poll};
 use std::pin::Pin;
 use std::task::Context;
 
@@ -35,7 +35,7 @@ pub trait Transform<S> {
     type InitError;
 
     /// The future response value.
-    type Future: Future<Output=Result<Self::Transform,Self::InitError>>;
+    type Future: Future<Output = Result<Self::Transform, Self::InitError>>;
 
     /// Creates and returns a new Service component, asynchronously
     fn new_transform(&self, service: S) -> Self::Future;
@@ -62,7 +62,6 @@ pub trait Transform<S> {
     {
         TransformFromErr::new(self)
     }
-
 
     // /// Map this service's init error to service's init error
     // /// if it is implementing `Into` to this service`s `InitError`.
@@ -220,7 +219,7 @@ where
     S: NewService,
     T: Transform<S::Service, InitError = S::InitError>,
 {
-    type Output = Result<T::Transform,T::InitError>;
+    type Output = Result<T::Transform, T::InitError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project_into();
@@ -236,6 +235,5 @@ where
         } else {
             Poll::Pending
         }
-
     }
 }

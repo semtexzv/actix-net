@@ -4,7 +4,7 @@ use futures::future::Future;
 use futures::{ready, Poll};
 
 use crate::cell::Cell;
-use crate::{IntoService, IntoFuture, NewService, Service};
+use crate::{IntoFuture, IntoService, NewService, Service};
 use std::pin::Pin;
 use std::task::Context;
 
@@ -15,19 +15,19 @@ pub fn apply_cfg<F, C, T, R, S>(
     srv: T,
     f: F,
 ) -> impl NewService<
-    Config=C,
-    Request=S::Request,
-    Response=S::Response,
-    Error=S::Error,
-    Service=S,
-    InitError=R::Error,
+    Config = C,
+    Request = S::Request,
+    Response = S::Response,
+    Error = S::Error,
+    Service = S,
+    InitError = R::Error,
 > + Clone
-    where
-        F: FnMut(&C, &mut T) -> R,
-        T: Service,
-        R: IntoFuture,
-        R::Item: IntoService<S>,
-        S: Service,
+where
+    F: FnMut(&C, &mut T) -> R,
+    T: Service,
+    R: IntoFuture,
+    R::Item: IntoService<S>,
+    S: Service,
 {
     ApplyConfigService {
         f: Cell::new(f),
@@ -42,21 +42,21 @@ pub fn new_apply_cfg<F, C, T, R, S>(
     srv: T,
     f: F,
 ) -> impl NewService<
-    Config=C,
-    Request=S::Request,
-    Response=S::Response,
-    Error=S::Error,
-    Service=S,
-    InitError=T::InitError,
+    Config = C,
+    Request = S::Request,
+    Response = S::Response,
+    Error = S::Error,
+    Service = S,
+    InitError = T::InitError,
 > + Clone
-    where
-        C: Clone,
-        F: FnMut(&C, &mut T::Service) -> R,
-        T: NewService<Config=()>,
-        T::InitError: From<T::Error>,
-        R: IntoFuture<Error=T::InitError>,
-        R::Item: IntoService<S>,
-        S: Service,
+where
+    C: Clone,
+    F: FnMut(&C, &mut T::Service) -> R,
+    T: NewService<Config = ()>,
+    T::InitError: From<T::Error>,
+    R: IntoFuture<Error = T::InitError>,
+    R::Item: IntoService<S>,
+    S: Service,
 {
     ApplyConfigNewService {
         f: Cell::new(f),
@@ -68,12 +68,12 @@ pub fn new_apply_cfg<F, C, T, R, S>(
 /// Convert `Fn(&Config) -> Future<Service>` fn to NewService\
 #[pin_project]
 struct ApplyConfigService<F, C, T, R, S>
-    where
-        F: FnMut(&C, &mut T) -> R,
-        T: Service,
-        R: IntoFuture,
-        R::Item: IntoService<S>,
-        S: Service,
+where
+    F: FnMut(&C, &mut T) -> R,
+    T: Service,
+    R: IntoFuture,
+    R::Item: IntoService<S>,
+    S: Service,
 {
     f: Cell<F>,
     #[pin]
@@ -82,12 +82,12 @@ struct ApplyConfigService<F, C, T, R, S>
 }
 
 impl<F, C, T, R, S> Clone for ApplyConfigService<F, C, T, R, S>
-    where
-        F: FnMut(&C, &mut T) -> R,
-        T: Service,
-        R: IntoFuture,
-        R::Item: IntoService<S>,
-        S: Service,
+where
+    F: FnMut(&C, &mut T) -> R,
+    T: Service,
+    R: IntoFuture,
+    R::Item: IntoService<S>,
+    S: Service,
 {
     fn clone(&self) -> Self {
         ApplyConfigService {
@@ -99,12 +99,12 @@ impl<F, C, T, R, S> Clone for ApplyConfigService<F, C, T, R, S>
 }
 
 impl<F, C, T, R, S> NewService for ApplyConfigService<F, C, T, R, S>
-    where
-        F: FnMut(&C, &mut T) -> R,
-        T: Service,
-        R: IntoFuture,
-        R::Item: IntoService<S>,
-        S: Service,
+where
+    F: FnMut(&C, &mut T) -> R,
+    T: Service,
+    R: IntoFuture,
+    R::Item: IntoService<S>,
+    S: Service,
 {
     type Config = C;
     type Request = S::Request;
@@ -126,21 +126,21 @@ impl<F, C, T, R, S> NewService for ApplyConfigService<F, C, T, R, S>
 
 #[pin_project]
 struct FnNewServiceConfigFut<R, S>
-    where
-        R: IntoFuture,
-        R::Item: IntoService<S>,
-        S: Service,
+where
+    R: IntoFuture,
+    R::Item: IntoService<S>,
+    S: Service,
 {
     #[pin]
     fut: R::Future,
-    _t: PhantomData<(S, )>,
+    _t: PhantomData<(S,)>,
 }
 
 impl<R, S> Future for FnNewServiceConfigFut<R, S>
-    where
-        R: IntoFuture,
-        R::Item: IntoService<S>,
-        S: Service,
+where
+    R: IntoFuture,
+    R::Item: IntoService<S>,
+    S: Service,
 {
     type Output = Result<S, R::Error>;
 
@@ -151,13 +151,13 @@ impl<R, S> Future for FnNewServiceConfigFut<R, S>
 
 /// Convert `Fn(&Config) -> Future<Service>` fn to NewService
 struct ApplyConfigNewService<F, C, T, R, S>
-    where
-        C: Clone,
-        F: FnMut(&C, &mut T::Service) -> R,
-        T: NewService<Config=()>,
-        R: IntoFuture<Error=T::InitError>,
-        R::Item: IntoService<S>,
-        S: Service,
+where
+    C: Clone,
+    F: FnMut(&C, &mut T::Service) -> R,
+    T: NewService<Config = ()>,
+    R: IntoFuture<Error = T::InitError>,
+    R::Item: IntoService<S>,
+    S: Service,
 {
     f: Cell<F>,
     srv: Cell<T>,
@@ -165,13 +165,13 @@ struct ApplyConfigNewService<F, C, T, R, S>
 }
 
 impl<F, C, T, R, S> Clone for ApplyConfigNewService<F, C, T, R, S>
-    where
-        C: Clone,
-        F: FnMut(&C, &mut T::Service) -> R,
-        T: NewService<Config=()>,
-        R: IntoFuture<Error=T::InitError>,
-        R::Item: IntoService<S>,
-        S: Service,
+where
+    C: Clone,
+    F: FnMut(&C, &mut T::Service) -> R,
+    T: NewService<Config = ()>,
+    R: IntoFuture<Error = T::InitError>,
+    R::Item: IntoService<S>,
+    S: Service,
 {
     fn clone(&self) -> Self {
         ApplyConfigNewService {
@@ -183,14 +183,14 @@ impl<F, C, T, R, S> Clone for ApplyConfigNewService<F, C, T, R, S>
 }
 
 impl<F, C, T, R, S> NewService for ApplyConfigNewService<F, C, T, R, S>
-    where
-        C: Clone,
-        F: FnMut(&C, &mut T::Service) -> R,
-        T: NewService<Config=()>,
-        T::InitError: From<T::Error>,
-        R: IntoFuture<Error=T::InitError>,
-        R::Item: IntoService<S>,
-        S: Service,
+where
+    C: Clone,
+    F: FnMut(&C, &mut T::Service) -> R,
+    T: NewService<Config = ()>,
+    T::InitError: From<T::Error>,
+    R: IntoFuture<Error = T::InitError>,
+    R::Item: IntoService<S>,
+    S: Service,
 {
     type Config = C;
     type Request = S::Request;
@@ -215,14 +215,14 @@ impl<F, C, T, R, S> NewService for ApplyConfigNewService<F, C, T, R, S>
 
 #[pin_project]
 struct ApplyConfigNewServiceFut<F, C, T, R, S>
-    where
-        C: Clone,
-        F: FnMut(&C, &mut T::Service) -> R,
-        T: NewService<Config=()>,
-        T::InitError: From<T::Error>,
-        R: IntoFuture<Error=T::InitError>,
-        R::Item: IntoService<S>,
-        S: Service,
+where
+    C: Clone,
+    F: FnMut(&C, &mut T::Service) -> R,
+    T: NewService<Config = ()>,
+    T::InitError: From<T::Error>,
+    R: IntoFuture<Error = T::InitError>,
+    R::Item: IntoService<S>,
+    S: Service,
 {
     cfg: C,
     f: Cell<F>,
@@ -232,18 +232,18 @@ struct ApplyConfigNewServiceFut<F, C, T, R, S>
     srv_fut: Option<T::Future>,
     #[pin]
     fut: Option<R::Future>,
-    _t: PhantomData<(S, )>,
+    _t: PhantomData<(S,)>,
 }
 
 impl<F, C, T, R, S> Future for ApplyConfigNewServiceFut<F, C, T, R, S>
-    where
-        C: Clone,
-        F: FnMut(&C, &mut T::Service) -> R,
-        T: NewService<Config=()>,
-        T::InitError: From<T::Error>,
-        R: IntoFuture<Error=T::InitError>,
-        R::Item: IntoService<S>,
-        S: Service,
+where
+    C: Clone,
+    F: FnMut(&C, &mut T::Service) -> R,
+    T: NewService<Config = ()>,
+    T::InitError: From<T::Error>,
+    R: IntoFuture<Error = T::InitError>,
+    R::Item: IntoService<S>,
+    S: Service,
 {
     type Output = Result<S, R::Error>;
 
@@ -266,11 +266,14 @@ impl<F, C, T, R, S> Future for ApplyConfigNewServiceFut<F, C, T, R, S>
             match srv.as_mut().poll_ready(cx)? {
                 Poll::Ready(_) => {
                     unsafe {
-                        this.fut.set(Some(this.f.get_mut()(&this.cfg, Pin::get_unchecked_mut(srv)).into_future()));
+                        this.fut.set(Some(
+                            this.f.get_mut()(&this.cfg, Pin::get_unchecked_mut(srv))
+                                .into_future(),
+                        ));
                     }
                     self.poll(cx)
                 }
-                Poll::Pending => Poll::Pending
+                Poll::Pending => Poll::Pending,
             }
         } else {
             Poll::Pending
