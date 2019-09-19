@@ -300,6 +300,7 @@ mod tests {
         }
     }
 
+    /*
     #[test]
     fn test_call() {
         let mut srv = Blank::new().apply_fn(Srv, |req: &'static str, srv| {
@@ -310,7 +311,6 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), Poll::Ready(("srv", ())));
     }
-
     #[test]
     fn test_new_service() {
         let new_srv = BlankNewService::new_unit().apply_fn(
@@ -326,4 +326,5 @@ mod tests {
             panic!()
         }
     }
+    */
 }
