@@ -1,5 +1,6 @@
 //! Custom cell impl
 use std::{cell::UnsafeCell, fmt, rc::Rc};
+use std::pin::Pin;
 
 pub(crate) struct Cell<T> {
     inner: Rc<UnsafeCell<T>>,
@@ -32,6 +33,10 @@ impl<T> Cell<T> {
 
     pub(crate) fn get_mut(&mut self) -> &mut T {
         unsafe { &mut *self.inner.as_ref().get() }
+    }
+    pub(crate) fn get_pin(self : Pin<&mut Self>) -> Pin<&mut T> {
+
+        unsafe { Pin::new_unchecked(&mut *self.inner.as_ref().get()) }
     }
 
     #[allow(clippy::mut_from_ref)]

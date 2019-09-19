@@ -1,17 +1,23 @@
-use std::cell::RefCell;
+use std::cell::{RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
-use futures::{Future, IntoFuture, Poll};
+use futures::{Future, Poll};
+use std::pin::Pin;
+use std::task;
+use std::task::Context;
+
+
+mod cell;
 
 mod and_then;
+/*
 mod and_then_apply;
 mod and_then_apply_fn;
 mod apply;
 mod apply_cfg;
 pub mod blank;
 pub mod boxed;
-mod cell;
 mod fn_service;
 mod fn_transform;
 mod from_err;
@@ -38,6 +44,7 @@ pub use self::transform::{apply_transform, IntoTransform, Transform};
 
 use self::and_then_apply::AndThenTransform;
 use self::and_then_apply_fn::{AndThenApply, AndThenApplyNewService};
+*/
 
 /// An asynchronous function from `Request` to a `Response`.
 pub trait Service {
@@ -51,7 +58,7 @@ pub trait Service {
     type Error;
 
     /// The future response value.
-    type Future: Future<Item = Self::Response, Error = Self::Error>;
+    type Future: Future<Output = Result<Self::Response, Self::Error>>;
 
     /// Returns `Ready` when the service is able to process requests.
     ///
@@ -62,7 +69,7 @@ pub trait Service {
     /// This is a **best effort** implementation. False positives are permitted.
     /// It is permitted for the service to return `Ready` from a `poll_ready`
     /// call and the next invocation of `call` results in an error.
-    fn poll_ready(&mut self) -> Poll<(), Self::Error>;
+    fn poll_ready(self : Pin<&mut Self>, ctx: &mut task::Context<'_>) -> Poll<Result<(),Self::Error>>;
 
     /// Process the request and return the response asynchronously.
     ///
@@ -79,6 +86,7 @@ pub trait Service {
 /// An extension trait for `Service`s that provides a variety of convenient
 /// adapters
 pub trait ServiceExt: Service {
+    /*
     /// Apply function to specified service and use it as a next service in
     /// chain.
     fn apply_fn<F, B, B1, Out>(self, service: B1, f: F) -> AndThenApply<Self, B, F, Out>
@@ -169,6 +177,7 @@ pub trait ServiceExt: Service {
     {
         MapErr::new(self, f)
     }
+    */
 }
 
 impl<T: ?Sized> ServiceExt for T where T: Service {}
@@ -206,11 +215,12 @@ pub trait NewService {
     type InitError;
 
     /// The future of the `Service` instance.
-    type Future: Future<Item = Self::Service, Error = Self::InitError>;
+    type Future: Future<Output=Result<Self::Service, Self::InitError>>;
 
     /// Create and return a new service value asynchronously.
     fn new_service(&self, cfg: &Self::Config) -> Self::Future;
 
+    /*
     /// Apply transform service to specified service and use it as a next service in
     /// chain.
     fn apply<T, T1, B, B1>(self, transform: T1, service: B1) -> AndThenTransform<T, Self, B>
@@ -332,6 +342,7 @@ pub trait NewService {
     {
         UnitConfig::new(self)
     }
+    */
 }
 
 impl<'a, S> Service for &'a mut S
@@ -343,9 +354,11 @@ where
     type Error = S::Error;
     type Future = S::Future;
 
-    fn poll_ready(&mut self) -> Poll<(), S::Error> {
-        (**self).poll_ready()
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        unsafe { self.map_unchecked_mut(|s| &mut **s).poll_ready(ctx) }
+
     }
+
 
     fn call(&mut self, request: Self::Request) -> S::Future {
         (**self).call(request)
@@ -361,8 +374,11 @@ where
     type Error = S::Error;
     type Future = S::Future;
 
-    fn poll_ready(&mut self) -> Poll<(), S::Error> {
-        (**self).poll_ready()
+    fn poll_ready(mut self : Pin<&mut Self>, ctx : &mut Context<'_>) -> Poll<Result<(), S::Error>> {
+        unsafe {
+            let p: &mut S = Pin::as_mut(&mut self).get_mut();
+            Pin::new_unchecked(p).poll_ready(ctx)
+        }
     }
 
     fn call(&mut self, request: Self::Request) -> S::Future {
@@ -379,12 +395,17 @@ where
     type Error = S::Error;
     type Future = S::Future;
 
-    fn poll_ready(&mut self) -> Poll<(), S::Error> {
-        self.borrow_mut().poll_ready()
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        unsafe {
+            let r = self.get_unchecked_mut();
+            Pin::new_unchecked(&mut (*(**r).borrow_mut())).poll_ready(ctx)
+        }
+
     }
 
+
     fn call(&mut self, request: Self::Request) -> S::Future {
-        self.borrow_mut().call(request)
+        (&mut (**self).borrow_mut()).call(request)
     }
 }
 
