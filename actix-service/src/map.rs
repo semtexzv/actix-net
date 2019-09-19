@@ -1,13 +1,19 @@
 use std::marker::PhantomData;
 
-use futures::{Async, Future, Poll};
+use futures::{Future, Poll};
 
 use super::{NewService, Service};
+use std::pin::Pin;
+use std::task::Context;
+
+use pin_project::pin_project;
 
 /// Service for the `map` combinator, changing the type of a service's response.
 ///
 /// This is created by the `ServiceExt::map` method.
+#[pin_project]
 pub struct Map<A, F, Response> {
+    #[pin]
     service: A,
     f: F,
     _t: PhantomData<Response>,
@@ -52,8 +58,8 @@ where
     type Error = A::Error;
     type Future = MapFuture<A, F, Response>;
 
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        self.service.poll_ready()
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project_into().service.poll_ready(ctx)
     }
 
     fn call(&mut self, req: A::Request) -> Self::Future {
@@ -61,12 +67,14 @@ where
     }
 }
 
+#[pin_project]
 pub struct MapFuture<A, F, Response>
 where
     A: Service,
     F: FnMut(A::Response) -> Response,
 {
     f: F,
+    #[pin]
     fut: A::Future,
 }
 
@@ -85,13 +93,16 @@ where
     A: Service,
     F: FnMut(A::Response) -> Response,
 {
-    type Item = Response;
-    type Error = A::Error;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.fut.poll()? {
-            Async::Ready(resp) => Ok(Async::Ready((self.f)(resp))),
-            Async::NotReady => Ok(Async::NotReady),
+
+    type Output = Result<Response,A::Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project_into();
+        match this.fut.poll(cx) {
+            Poll::Ready(Ok(resp)) => Poll::Ready(Ok((this.f)(resp))),
+            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+            Poll::Pending => Poll::Pending
         }
     }
 }
@@ -150,12 +161,13 @@ where
         MapNewServiceFuture::new(self.a.new_service(cfg), self.f.clone())
     }
 }
-
+#[pin_project]
 pub struct MapNewServiceFuture<A, F, Res>
 where
     A: NewService,
     F: FnMut(A::Response) -> Res,
 {
+    #[pin]
     fut: A::Future,
     f: Option<F>,
 }
@@ -175,16 +187,18 @@ where
     A: NewService,
     F: FnMut(A::Response) -> Res,
 {
-    type Item = Map<A::Service, F, Res>;
-    type Error = A::InitError;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Async::Ready(service) = self.fut.poll()? {
-            Ok(Async::Ready(Map::new(service, self.f.take().unwrap())))
+    type Output = Result<Map<A::Service, F, Res>,A::InitError>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project_into();
+        if let Poll::Ready(svc) = this.fut.poll(cx)? {
+            Poll::Ready(Ok(Map::new(svc,this.f.take().unwrap())))
         } else {
-            Ok(Async::NotReady)
+            Poll::Pending
         }
     }
+
 }
 
 #[cfg(test)]

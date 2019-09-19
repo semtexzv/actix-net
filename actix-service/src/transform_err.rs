@@ -3,6 +3,10 @@ use std::marker::PhantomData;
 use futures::{Future, Poll};
 
 use super::Transform;
+use std::pin::Pin;
+use std::task::Context;
+
+use pin_project::pin_project;
 
 /// Transform for the `map_err` combinator, changing the type of a new
 /// transform's init error.
@@ -63,12 +67,13 @@ where
         }
     }
 }
-
+#[pin_project]
 pub struct TransformMapInitErrFuture<T, S, F, E>
 where
     T: Transform<S>,
     F: Fn(T::InitError) -> E,
 {
+    #[pin]
     fut: T::Future,
     f: F,
 }
@@ -78,12 +83,13 @@ where
     T: Transform<S>,
     F: Fn(T::InitError) -> E + Clone,
 {
-    type Item = T::Transform;
-    type Error = E;
+    type Output = Result<T::Transform, E>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.fut.poll().map_err(&self.f)
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project_into();
+        this.fut.poll(cx).map_err(this.f)
     }
+
 }
 
 /// Transform for the `from_err` combinator, changing the type of a new
@@ -139,11 +145,13 @@ where
     }
 }
 
+#[pin_project]
 pub struct TransformFromErrFuture<T, S, E>
 where
     T: Transform<S>,
     E: From<T::InitError>,
 {
+    #[pin]
     fut: T::Future,
     _t: PhantomData<E>,
 }
@@ -153,10 +161,9 @@ where
     T: Transform<S>,
     E: From<T::InitError>,
 {
-    type Item = T::Transform;
-    type Error = E;
+    type Output = Result<T::Transform, E>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.fut.poll().map_err(E::from)
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.project_into().fut.poll(cx).map_err(E::from)
     }
 }

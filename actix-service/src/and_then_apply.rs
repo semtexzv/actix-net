@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use futures::{Async, Future, Poll};
+use futures::{Future, Poll};
 
 use crate::and_then::AndThen;
 use crate::from_err::FromErr;

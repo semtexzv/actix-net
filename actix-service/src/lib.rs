@@ -20,28 +20,37 @@ pub mod blank;
 pub mod boxed;
 mod fn_service;
 mod fn_transform;
+*/
 mod from_err;
 mod map;
+/*
 mod map_config;
+
 mod map_err;
 mod map_init_err;
 mod then;
+*/
 mod transform;
 mod transform_err;
 
 pub use self::and_then::{AndThen, AndThenNewService};
+/*
 pub use self::apply::{apply_fn, new_apply_fn, Apply, ApplyNewService};
 pub use self::apply_cfg::{apply_cfg, new_apply_cfg};
 pub use self::fn_service::{new_service_cfg, new_service_fn, service_fn, ServiceFn};
 pub use self::fn_transform::transform_fn;
+*/
 pub use self::from_err::{FromErr, FromErrNewService};
+/*
 pub use self::map::{Map, MapNewService};
 pub use self::map_config::{MapConfig, MappedConfig, UnitConfig};
 pub use self::map_err::{MapErr, MapErrNewService};
 pub use self::map_init_err::MapInitErr;
 pub use self::then::{Then, ThenNewService};
+*/
 pub use self::transform::{apply_transform, IntoTransform, Transform};
 
+/*
 use self::and_then_apply::AndThenTransform;
 use self::and_then_apply_fn::{AndThenApply, AndThenApplyNewService};
 */
@@ -100,6 +109,7 @@ pub trait ServiceExt: Service {
     {
         AndThenApply::new(self, service, f)
     }
+    */
 
     /// Call another service after call to this one has resolved successfully.
     ///
@@ -119,6 +129,7 @@ pub trait ServiceExt: Service {
         AndThen::new(self, service.into_service())
     }
 
+    /*
     /// Map this service's error to any error implementing `From` for
     /// this service`s `Error`.
     ///

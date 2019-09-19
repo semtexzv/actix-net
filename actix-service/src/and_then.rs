@@ -22,17 +22,17 @@ pub struct AndThen<A, B> {
 impl<A, B> AndThen<A, B> {
     /// Create new `AndThen` combinator
     pub fn new(a: A, b: B) -> Self
-    where
-        A: Service,
-        B: Service<Request = A::Response, Error = A::Error>,
+        where
+            A: Service,
+            B: Service<Request=A::Response, Error=A::Error>,
     {
         Self { a, b: Cell::new(b) }
     }
 }
 
 impl<A, B> Clone for AndThen<A, B>
-where
-    A: Clone,
+    where
+        A: Clone,
 {
     fn clone(&self) -> Self {
         AndThen {
@@ -43,16 +43,16 @@ where
 }
 
 impl<A, B> Service for AndThen<A, B>
-where
-    A: Service,
-    B: Service<Request = A::Response, Error = A::Error>,
+    where
+        A: Service,
+        B: Service<Request=A::Response, Error=A::Error>,
 {
     type Request = A::Request;
     type Response = B::Response;
     type Error = A::Error;
     type Future = AndThenFuture<A, B>;
 
-    fn poll_ready(self : Pin<&mut Self>, cx : &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let this = self.project_into();
         let not_ready = !this.a.poll_ready(cx)?.is_ready();
         if !this.b.get_pin().poll_ready(cx)?.is_ready() || not_ready {
@@ -69,11 +69,10 @@ where
 
 #[pin_project]
 pub struct AndThenFuture<A, B>
-where
-    A: Service,
-    B: Service<Request = A::Response, Error = A::Error>,
+    where
+        A: Service,
+        B: Service<Request=A::Response, Error=A::Error>,
 {
-
     b: Cell<B>,
     #[pin]
     fut_b: Option<B::Future>,
@@ -82,9 +81,9 @@ where
 }
 
 impl<A, B> AndThenFuture<A, B>
-where
-    A: Service,
-    B: Service<Request = A::Response, Error = A::Error>,
+    where
+        A: Service,
+        B: Service<Request=A::Response, Error=A::Error>,
 {
     fn new(a: A::Future, b: Cell<B>) -> Self {
         AndThenFuture {
@@ -96,59 +95,55 @@ where
 }
 
 impl<A, B> Future for AndThenFuture<A, B>
-where
-    A: Service,
-    B: Service<Request = A::Response, Error = A::Error>,
+    where
+        A: Service,
+        B: Service<Request=A::Response, Error=A::Error>,
 {
-    type Output = Result<B::Response,A::Error>;
+    type Output = Result<B::Response, A::Error>;
 
-    fn poll(mut self : Pin<&mut Self>, cx : &mut Context<'_>) -> Poll<Self::Output> {
-        loop {
-            let mut this = self.project();
-            let mut fut_a = this.fut_a.as_pin_mut();
-            let mut fut_b = this.fut_b.as_pin_mut();
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
 
-            if let Some(fut) = fut_b {
-                return fut.poll(cx);
-            }
+        let mut fut_a = this.fut_a;
+        let mut fut_b = this.fut_b;
 
-            unsafe {
-            match fut_a.expect("Bug in actix-service").poll(cx) {
-                Poll::Ready(Ok(resp)) => {
-                    fut_a = None;
-                    let new_fut = this.b.get_mut().call(resp);
-                    fut_b = Some(Pin::new_unchecked(&mut new_fut))
-
-                    //self.poll(cx)
-                }
-                Poll::Ready(Err(e)) =>  return Poll::Ready(Err(e)),
-                Poll::Pending => return Poll::Pending,
-            }
+        if let Some(fut) = fut_b.as_mut().as_pin_mut() {
+            return fut.poll(cx);
         }
-            }
 
+        match fut_a.as_mut().as_pin_mut().expect("Bug in actix-service").poll(cx) {
+            Poll::Ready(Ok(resp)) => {
+                fut_a.set(None);
+                let new_fut = this.b.get_mut().call(resp);
+                fut_b.set(Some(new_fut));
+
+                self.poll(cx)
+            }
+            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 
 /// `AndThenNewService` new service combinator
 pub struct AndThenNewService<A, B>
-where
-    A: NewService,
-    B: NewService,
+    where
+        A: NewService,
+        B: NewService,
 {
     a: A,
     b: B,
 }
 
 impl<A, B> AndThenNewService<A, B>
-where
-    A: NewService,
-    B: NewService<
-        Config = A::Config,
-        Request = A::Response,
-        Error = A::Error,
-        InitError = A::InitError,
-    >,
+    where
+        A: NewService,
+        B: NewService<
+            Config=A::Config,
+            Request=A::Response,
+            Error=A::Error,
+            InitError=A::InitError,
+        >,
 {
     /// Create new `AndThen` combinator
     pub fn new<F: IntoNewService<B>>(a: A, f: F) -> Self {
@@ -160,14 +155,14 @@ where
 }
 
 impl<A, B> NewService for AndThenNewService<A, B>
-where
-    A: NewService,
-    B: NewService<
-        Config = A::Config,
-        Request = A::Response,
-        Error = A::Error,
-        InitError = A::InitError,
-    >,
+    where
+        A: NewService,
+        B: NewService<
+            Config=A::Config,
+            Request=A::Response,
+            Error=A::Error,
+            InitError=A::InitError,
+        >,
 {
     type Request = A::Request;
     type Response = B::Response;
@@ -184,9 +179,9 @@ where
 }
 
 impl<A, B> Clone for AndThenNewService<A, B>
-where
-    A: NewService + Clone,
-    B: NewService + Clone,
+    where
+        A: NewService + Clone,
+        B: NewService + Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -198,22 +193,23 @@ where
 
 #[pin_project]
 pub struct AndThenNewServiceFuture<A, B>
-where
-    A: NewService,
-    B: NewService<Request = A::Response>,
+    where
+        A: NewService,
+        B: NewService<Request=A::Response>,
 {
     #[pin]
     fut_b: B::Future,
     #[pin]
     fut_a: A::Future,
+
     a: Option<A::Service>,
     b: Option<B::Service>,
 }
 
 impl<A, B> AndThenNewServiceFuture<A, B>
-where
-    A: NewService,
-    B: NewService<Request = A::Response>,
+    where
+        A: NewService,
+        B: NewService<Request=A::Response>,
 {
     fn new(fut_a: A::Future, fut_b: B::Future) -> Self {
         AndThenNewServiceFuture {
@@ -226,47 +222,39 @@ where
 }
 
 impl<A, B> Future for AndThenNewServiceFuture<A, B>
-where
-    A: NewService,
-    B: NewService<Request = A::Response, Error = A::Error, InitError = A::InitError>,
+    where
+        A: NewService,
+        B: NewService<Request=A::Response, Error=A::Error, InitError=A::InitError>,
 {
     type Output = Result<AndThen<A::Service, B::Service>, A::InitError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        unimplemented!()
-    }
-
-
-    /*
-    fn poll(&mut self) -> Poll<Result<Self::Output, Self::Error>> {
-        if self.a.is_none() {
-            if let Poll::Ready(service) = self.fut_a.poll()? {
-                self.a = Some(service);
+        let this = self.project_into();
+        if this.a.is_none() {
+            if let Poll::Ready(service) = this.fut_a.poll(cx)? {
+                *this.a = Some(service);
             }
         }
-
-        if self.b.is_none() {
-            if let Poll::Ready(service) = self.fut_b.poll()? {
-                self.b = Some(service);
+        if this.b.is_none() {
+            if let Poll::Ready(service) = this.fut_b.poll(cx)? {
+                *this.b = Some(service);
             }
         }
-
-        if self.a.is_some() && self.b.is_some() {
-            Ok(Poll::Ready(AndThen::new(
-                self.a.take().unwrap(),
-                self.b.take().unwrap(),
+        if this.a.is_some() && this.b.is_some() {
+            Poll::Ready(Ok(AndThen::new(
+                this.a.take().unwrap(),
+                this.b.take().unwrap(),
             )))
         } else {
-            Ok(Poll::Pending)
+            Poll::Pending
         }
     }
-    */
 }
 
 #[cfg(test)]
 mod tests {
-    use futures::future::{ok, FutureResult};
-    use futures::{Async, Poll};
+    use futures::future::{ok, Ready};
+    use futures::Poll;
     use std::cell::Cell;
     use std::rc::Rc;
 
@@ -274,15 +262,16 @@ mod tests {
     use crate::{NewService, Service, ServiceExt};
 
     struct Srv1(Rc<Cell<usize>>);
+
     impl Service for Srv1 {
         type Request = &'static str;
         type Response = &'static str;
         type Error = ();
-        type Future = FutureResult<Self::Response, ()>;
+        type Future = Ready<Result<Self::Response, ()>>;
 
-        fn poll_ready(&mut self) -> Poll<(), Self::Error> {
+        fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
             self.0.set(self.0.get() + 1);
-            Ok(Poll::Ready(()))
+            Poll::Ready(Ok(()))
         }
 
         fn call(&mut self, req: &'static str) -> Self::Future {
@@ -297,11 +286,11 @@ mod tests {
         type Request = &'static str;
         type Response = (&'static str, &'static str);
         type Error = ();
-        type Future = FutureResult<Self::Response, ()>;
+        type Future = Ready<Result<Self::Response, ()>>;
 
-        fn poll_ready(&mut self) -> Poll<(), Self::Error> {
+        fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
             self.0.set(self.0.get() + 1);
-            Ok(Poll::Ready(()))
+            Poll::Ready(Ok(()))
         }
 
         fn call(&mut self, req: &'static str) -> Self::Future {

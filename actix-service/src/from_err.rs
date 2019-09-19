@@ -1,13 +1,18 @@
 use std::marker::PhantomData;
 
-use futures::{Async, Future, Poll};
+use futures::{Future, Poll};
 
 use super::{NewService, Service};
+use std::pin::Pin;
+use std::task::Context;
 
+use pin_project::pin_project;
 /// Service for the `from_err` combinator, changing the error type of a service.
 ///
 /// This is created by the `ServiceExt::from_err` method.
+#[pin_project]
 pub struct FromErr<A, E> {
+    #[pin]
     service: A,
     f: PhantomData<E>,
 }
@@ -47,8 +52,8 @@ where
     type Error = E;
     type Future = FromErrFuture<A, E>;
 
-    fn poll_ready(&mut self) -> Poll<(), E> {
-        self.service.poll_ready().map_err(E::from)
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project_into().service.poll_ready(ctx).map_err(E::from)
     }
 
     fn call(&mut self, req: A::Request) -> Self::Future {
@@ -58,8 +63,9 @@ where
         }
     }
 }
-
+#[pin_project]
 pub struct FromErrFuture<A: Service, E> {
+    #[pin]
     fut: A::Future,
     f: PhantomData<E>,
 }
@@ -69,11 +75,11 @@ where
     A: Service,
     E: From<A::Error>,
 {
-    type Item = A::Response;
-    type Error = E;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.fut.poll().map_err(E::from)
+    type Output = Result<A::Response,E>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.project_into().fut.poll(cx).map_err(E::from)
     }
 }
 
@@ -130,12 +136,13 @@ where
         }
     }
 }
-
+#[pin_project]
 pub struct FromErrNewServiceFuture<A, E>
 where
     A: NewService,
     E: From<A::Error>,
 {
+    #[pin]
     fut: A::Future,
     e: PhantomData<E>,
 }
@@ -145,16 +152,25 @@ where
     A: NewService,
     E: From<A::Error>,
 {
-    type Item = FromErr<A::Service, E>;
-    type Error = A::InitError;
+    type Output = Result<FromErr<A::Service,E>,A::InitError>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Async::Ready(service) = self.fut.poll()? {
-            Ok(Async::Ready(FromErr::new(service)))
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if let Poll::Ready(svc) = self.project_into().fut.poll(cx)? {
+            Poll::Ready(Ok(FromErr::new(svc)))
         } else {
-            Ok(Async::NotReady)
+            Poll::Pending
         }
     }
+
+    /*
+        fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+            if let Async::Ready(service) = self.fut.poll()? {
+                Ok(Async::Ready(FromErr::new(service)))
+            } else {
+                Ok(Async::NotReady)
+            }
+        }
+        */
 }
 
 #[cfg(test)]
