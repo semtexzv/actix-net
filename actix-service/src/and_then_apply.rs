@@ -134,37 +134,6 @@ where
             Poll::Pending
         }
     }
-
-    /*
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if self.fut_t.is_none() {
-            if let Poll::Ready(service) = self.fut_b.poll()? {
-                self.fut_t = Some(self.t_cell.new_transform(service));
-            }
-        }
-
-        if self.a.is_none() {
-            if let Poll::Ready(service) = self.fut_a.poll()? {
-                self.a = Some(service);
-            }
-        }
-
-        if let Some(ref mut fut) = self.fut_t {
-            if let Poll::Ready(transform) = fut.poll()? {
-                self.t = Some(transform);
-            }
-        }
-
-        if self.a.is_some() && self.t.is_some() {
-            Ok(Poll::Ready(AndThen::new(
-                FromErr::new(self.a.take().unwrap()),
-                self.t.take().unwrap(),
-            )))
-        } else {
-            Ok(Poll::Pending)
-        }
-    }
-    */
 }
 
 #[cfg(test)]
@@ -213,10 +182,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_new_service() {
-        //let blank = || Ok::<_, ()>((|req| Ok(req)).into_service());\
 
         let blank = move || ok::<_, ()>((|req| ok(req)).into_service());
-        //let blank = ok((|req| ok(req)).into_service());
 
         let new_srv = blank.into_new_service().apply(
             |req: &'static str, srv: &mut Srv| srv.call(()).map_ok(move |res| (req, res)),

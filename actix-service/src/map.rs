@@ -22,9 +22,9 @@ pub struct Map<A, F, Response> {
 impl<A, F, Response> Map<A, F, Response> {
     /// Create new `Map` combinator
     pub fn new(service: A, f: F) -> Self
-    where
-        A: Service,
-        F: FnMut(A::Response) -> Response,
+        where
+            A: Service,
+            F: FnMut(A::Response) -> Response,
     {
         Self {
             service,
@@ -35,9 +35,9 @@ impl<A, F, Response> Map<A, F, Response> {
 }
 
 impl<A, F, Response> Clone for Map<A, F, Response>
-where
-    A: Clone,
-    F: Clone,
+    where
+        A: Clone,
+        F: Clone,
 {
     fn clone(&self) -> Self {
         Map {
@@ -49,9 +49,9 @@ where
 }
 
 impl<A, F, Response> Service for Map<A, F, Response>
-where
-    A: Service,
-    F: FnMut(A::Response) -> Response + Clone,
+    where
+        A: Service,
+        F: FnMut(A::Response) -> Response + Clone,
 {
     type Request = A::Request;
     type Response = Response;
@@ -72,9 +72,9 @@ where
 
 #[pin_project]
 pub struct MapFuture<A, F, Response>
-where
-    A: Service,
-    F: FnMut(A::Response) -> Response,
+    where
+        A: Service,
+        F: FnMut(A::Response) -> Response,
 {
     f: F,
     #[pin]
@@ -82,9 +82,9 @@ where
 }
 
 impl<A, F, Response> MapFuture<A, F, Response>
-where
-    A: Service,
-    F: FnMut(A::Response) -> Response,
+    where
+        A: Service,
+        F: FnMut(A::Response) -> Response,
 {
     fn new(fut: A::Future, f: F) -> Self {
         MapFuture { f, fut }
@@ -92,9 +92,9 @@ where
 }
 
 impl<A, F, Response> Future for MapFuture<A, F, Response>
-where
-    A: Service,
-    F: FnMut(A::Response) -> Response,
+    where
+        A: Service,
+        F: FnMut(A::Response) -> Response,
 {
     type Output = Result<Response, A::Error>;
 
@@ -118,9 +118,9 @@ pub struct MapNewService<A, F, Res> {
 impl<A, F, Res> MapNewService<A, F, Res> {
     /// Create new `Map` new service instance
     pub fn new(a: A, f: F) -> Self
-    where
-        A: NewService,
-        F: FnMut(A::Response) -> Res,
+        where
+            A: NewService,
+            F: FnMut(A::Response) -> Res,
     {
         Self {
             a,
@@ -131,9 +131,9 @@ impl<A, F, Res> MapNewService<A, F, Res> {
 }
 
 impl<A, F, Res> Clone for MapNewService<A, F, Res>
-where
-    A: Clone,
-    F: Clone,
+    where
+        A: Clone,
+        F: Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -145,9 +145,9 @@ where
 }
 
 impl<A, F, Res> NewService for MapNewService<A, F, Res>
-where
-    A: NewService,
-    F: FnMut(A::Response) -> Res + Clone,
+    where
+        A: NewService,
+        F: FnMut(A::Response) -> Res + Clone,
 {
     type Request = A::Request;
     type Response = Res;
@@ -162,11 +162,12 @@ where
         MapNewServiceFuture::new(self.a.new_service(cfg), self.f.clone())
     }
 }
+
 #[pin_project]
 pub struct MapNewServiceFuture<A, F, Res>
-where
-    A: NewService,
-    F: FnMut(A::Response) -> Res,
+    where
+        A: NewService,
+        F: FnMut(A::Response) -> Res,
 {
     #[pin]
     fut: A::Future,
@@ -174,9 +175,9 @@ where
 }
 
 impl<A, F, Res> MapNewServiceFuture<A, F, Res>
-where
-    A: NewService,
-    F: FnMut(A::Response) -> Res,
+    where
+        A: NewService,
+        F: FnMut(A::Response) -> Res,
 {
     fn new(fut: A::Future, f: F) -> Self {
         MapNewServiceFuture { f: Some(f), fut }
@@ -184,9 +185,9 @@ where
 }
 
 impl<A, F, Res> Future for MapNewServiceFuture<A, F, Res>
-where
-    A: NewService,
-    F: FnMut(A::Response) -> Res,
+    where
+        A: NewService,
+        F: FnMut(A::Response) -> Res,
 {
     type Output = Result<Map<A::Service, F, Res>, A::InitError>;
 
@@ -208,6 +209,7 @@ mod tests {
     use crate::{IntoNewService, Service, ServiceExt};
 
     struct Srv;
+
     impl Service for Srv {
         type Request = ();
         type Response = ();
@@ -226,10 +228,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_poll_ready() {
+    #[tokio::test]
+    async fn test_poll_ready() {
         let mut srv = Srv.map(|_| "ok");
-        let res = srv.poll_test();
+        let res = srv.poll_once().await;
         assert_eq!(res, Poll::Ready(Ok(())));
     }
 
@@ -241,18 +243,14 @@ mod tests {
         assert_eq!(res.unwrap(), "ok");
     }
 
-    /*
-    #[test]
-    fn test_new_service() {
-        let blank = || Ok::<_, ()>(Srv);
+
+    #[tokio::test]
+    async fn test_new_service() {
+        let blank = || ok::<_, ()>(Srv);
         let new_srv = blank.into_new_service().map(|_| "ok");
-        if let Poll::Ready(mut srv) = new_srv.new_service(&()).poll().unwrap() {
-            let res = srv.call(()).poll();
-            assert!(res.is_ok());
-            assert_eq!(res.unwrap(), Poll::Ready("ok"));
-        } else {
-            panic!()
-        }
+        let mut srv = new_srv.new_service(&()).await.unwrap();
+        let res = srv.call(()).await;
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), ("ok"));
     }
-    */
 }

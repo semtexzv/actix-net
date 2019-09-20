@@ -11,24 +11,24 @@ use std::task::Context;
 
 /// Apply tranform function to a service
 pub fn apply_fn<T, F, In, Out, U>(service: U, f: F) -> Apply<T, F, In, Out>
-where
-    T: Service,
-    F: FnMut(In, &mut T) -> Out,
-    Out: IntoFuture,
-    Out::Error: From<T::Error>,
-    U: IntoService<T>,
+    where
+        T: Service,
+        F: FnMut(In, &mut T) -> Out,
+        Out: IntoFuture,
+        Out::Error: From<T::Error>,
+        U: IntoService<T>,
 {
     Apply::new(service.into_service(), f)
 }
 
 /// Create factory for `apply` service.
 pub fn new_apply_fn<T, F, In, Out, U>(service: U, f: F) -> ApplyNewService<T, F, In, Out>
-where
-    T: NewService,
-    F: FnMut(In, &mut T::Service) -> Out + Clone,
-    Out: IntoFuture,
-    Out::Error: From<T::Error>,
-    U: IntoNewService<T>,
+    where
+        T: NewService,
+        F: FnMut(In, &mut T::Service) -> Out + Clone,
+        Out: IntoFuture,
+        Out::Error: From<T::Error>,
+        U: IntoNewService<T>,
 {
     ApplyNewService::new(service.into_new_service(), f)
 }
@@ -37,8 +37,8 @@ where
 /// `Apply` service combinator
 #[pin_project]
 pub struct Apply<T, F, In, Out>
-where
-    T: Service,
+    where
+        T: Service,
 {
     #[pin]
     service: T,
@@ -47,11 +47,11 @@ where
 }
 
 impl<T, F, In, Out> Apply<T, F, In, Out>
-where
-    T: Service,
-    F: FnMut(In, &mut T) -> Out,
-    Out: IntoFuture,
-    Out::Error: From<T::Error>,
+    where
+        T: Service,
+        F: FnMut(In, &mut T) -> Out,
+        Out: IntoFuture,
+        Out::Error: From<T::Error>,
 {
     /// Create new `Apply` combinator
     pub(crate) fn new<I: IntoService<T>>(service: I, f: F) -> Self {
@@ -64,9 +64,9 @@ where
 }
 
 impl<T, F, In, Out> Clone for Apply<T, F, In, Out>
-where
-    T: Service + Clone,
-    F: Clone,
+    where
+        T: Service + Clone,
+        F: Clone,
 {
     fn clone(&self) -> Self {
         Apply {
@@ -78,11 +78,11 @@ where
 }
 
 impl<T, F, In, Out> Service for Apply<T, F, In, Out>
-where
-    T: Service,
-    F: FnMut(In, &mut T) -> Out,
-    Out: IntoFuture,
-    Out::Error: From<T::Error>,
+    where
+        T: Service,
+        F: FnMut(In, &mut T) -> Out,
+        Out: IntoFuture,
+        Out::Error: From<T::Error>,
 {
     type Request = In;
     type Response = Out::Item;
@@ -103,8 +103,8 @@ where
 
 /// `ApplyNewService` new service combinator
 pub struct ApplyNewService<T, F, In, Out>
-where
-    T: NewService,
+    where
+        T: NewService,
 {
     service: T,
     f: F,
@@ -112,11 +112,11 @@ where
 }
 
 impl<T, F, In, Out> ApplyNewService<T, F, In, Out>
-where
-    T: NewService,
-    F: FnMut(In, &mut T::Service) -> Out + Clone,
-    Out: IntoFuture,
-    Out::Error: From<T::Error>,
+    where
+        T: NewService,
+        F: FnMut(In, &mut T::Service) -> Out + Clone,
+        Out: IntoFuture,
+        Out::Error: From<T::Error>,
 {
     /// Create new `ApplyNewService` new service instance
     pub(crate) fn new<F1: IntoNewService<T>>(service: F1, f: F) -> Self {
@@ -129,10 +129,10 @@ where
 }
 
 impl<T, F, In, Out> Clone for ApplyNewService<T, F, In, Out>
-where
-    T: NewService + Clone,
-    F: FnMut(In, &mut T::Service) -> Out + Clone,
-    Out: IntoFuture,
+    where
+        T: NewService + Clone,
+        F: FnMut(In, &mut T::Service) -> Out + Clone,
+        Out: IntoFuture,
 {
     fn clone(&self) -> Self {
         Self {
@@ -144,11 +144,11 @@ where
 }
 
 impl<T, F, In, Out> NewService for ApplyNewService<T, F, In, Out>
-where
-    T: NewService,
-    F: FnMut(In, &mut T::Service) -> Out + Clone,
-    Out: IntoFuture,
-    Out::Error: From<T::Error>,
+    where
+        T: NewService,
+        F: FnMut(In, &mut T::Service) -> Out + Clone,
+        Out: IntoFuture,
+        Out::Error: From<T::Error>,
 {
     type Request = In;
     type Response = Out::Item;
@@ -166,10 +166,10 @@ where
 
 #[pin_project]
 pub struct ApplyNewServiceFuture<T, F, In, Out>
-where
-    T: NewService,
-    F: FnMut(In, &mut T::Service) -> Out + Clone,
-    Out: IntoFuture,
+    where
+        T: NewService,
+        F: FnMut(In, &mut T::Service) -> Out + Clone,
+        Out: IntoFuture,
 {
     #[pin]
     fut: T::Future,
@@ -178,10 +178,10 @@ where
 }
 
 impl<T, F, In, Out> ApplyNewServiceFuture<T, F, In, Out>
-where
-    T: NewService,
-    F: FnMut(In, &mut T::Service) -> Out + Clone,
-    Out: IntoFuture,
+    where
+        T: NewService,
+        F: FnMut(In, &mut T::Service) -> Out + Clone,
+        Out: IntoFuture,
 {
     fn new(fut: T::Future, f: F) -> Self {
         ApplyNewServiceFuture {
@@ -193,11 +193,11 @@ where
 }
 
 impl<T, F, In, Out> Future for ApplyNewServiceFuture<T, F, In, Out>
-where
-    T: NewService,
-    F: FnMut(In, &mut T::Service) -> Out + Clone,
-    Out: IntoFuture,
-    Out::Error: From<T::Error>,
+    where
+        T: NewService,
+        F: FnMut(In, &mut T::Service) -> Out + Clone,
+        Out: IntoFuture,
+        Out::Error: From<T::Error>,
 {
     type Output = Result<Apply<T::Service, F, In, Out>, T::InitError>;
 
@@ -214,7 +214,7 @@ where
 #[cfg(test)]
 mod tests {
     use futures::future::{ok, Ready};
-    use futures::{Future, Poll};
+    use futures::{Future, Poll, TryFutureExt};
 
     use super::*;
     use crate::{IntoService, NewService, Service, ServiceExt};
@@ -239,36 +239,34 @@ mod tests {
             ok(())
         }
     }
-    /*
-    #[test]
-    fn test_call() {
-        let blank = |req| Ok(req);
+
+    #[tokio::test]
+    async fn test_call() {
+        let blank = |req| ok(req);
 
         let mut srv = blank
             .into_service()
             .apply_fn(Srv, |req: &'static str, srv| {
-                srv.call(()).map(move |res| (req, res))
+                srv.call(()).map_ok(move |res| (req, res))
             });
-        assert!(srv.poll_ready().is_ok());
-        let res = srv.call("srv").poll();
+        assert_eq!(srv.poll_once().await, Poll::Ready(Ok(())));
+        let res = srv.call("srv").await;
         assert!(res.is_ok());
-        assert_eq!(res.unwrap(), Poll::Ready(("srv", ())));
+        assert_eq!(res.unwrap(), (("srv", ())));
     }
 
-    #[test]
-    fn test_new_service() {
+    #[tokio::test]
+    async fn test_new_service() {
         let new_srv = ApplyNewService::new(
-            || Ok::<_, ()>(Srv),
-            |req: &'static str, srv| srv.call(()).map(move |res| (req, res)),
+            || ok::<_, ()>(Srv),
+            |req: &'static str, srv| srv.call(()).map_ok(move |res| (req, res)),
         );
-        if let Poll::Ready(mut srv) = new_srv.new_service(&()).poll().unwrap() {
-            assert!(srv.poll_ready().is_ok());
-            let res = srv.call("srv").poll();
-            assert!(res.is_ok());
-            assert_eq!(res.unwrap(), Poll::Ready(("srv", ())));
-        } else {
-            panic!()
-        }
+
+        let mut srv = new_srv.new_service(&()).await.unwrap();
+
+        assert_eq!(srv.poll_once().await, Poll::Ready(Ok(())));
+        let res = srv.call("srv").await;
+        assert!(res.is_ok());
+        assert_eq!(res.unwrap(), (("srv", ())));
     }
-    */
 }

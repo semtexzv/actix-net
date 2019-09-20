@@ -333,11 +333,11 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_poll_ready() {
+    #[tokio::test]
+    async fn test_poll_ready() {
         let cnt = Rc::new(Cell::new(0));
         let mut srv = Srv1(cnt.clone()).then(Srv2(cnt.clone()));
-        let res = srv.poll_test();
+        let res = srv.poll_once().await;
         assert_eq!(res, Poll::Ready(Err(())));
         assert_eq!(cnt.get(), 2);
     }

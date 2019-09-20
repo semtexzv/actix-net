@@ -309,11 +309,11 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_poll_ready() {
+    #[tokio::test]
+    async fn test_poll_ready() {
         let cnt = Rc::new(Cell::new(0));
         let mut srv = Srv1(cnt.clone()).and_then(Srv2(cnt.clone()));
-        let res = srv.poll_test();
+        let res = srv.poll_once().await;
         assert_eq!(res, Poll::Ready(Ok(())));
         assert_eq!(cnt.get(), 2);
     }
@@ -323,7 +323,6 @@ mod tests {
         let cnt = Rc::new(Cell::new(0));
         let mut srv = Srv1(cnt.clone()).and_then(Srv2(cnt));
         let res = srv.call("srv1").await;
-        ;
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), (("srv1", "srv2")));
     }

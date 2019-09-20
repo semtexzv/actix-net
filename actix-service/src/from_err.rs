@@ -20,9 +20,9 @@ pub struct FromErr<A, E> {
 
 impl<A, E> FromErr<A, E> {
     pub(crate) fn new(service: A) -> Self
-    where
-        A: Service,
-        E: From<A::Error>,
+        where
+            A: Service,
+            E: From<A::Error>,
     {
         FromErr {
             service,
@@ -32,8 +32,8 @@ impl<A, E> FromErr<A, E> {
 }
 
 impl<A, E> Clone for FromErr<A, E>
-where
-    A: Clone,
+    where
+        A: Clone,
 {
     fn clone(&self) -> Self {
         FromErr {
@@ -44,9 +44,9 @@ where
 }
 
 impl<A, E> Service for FromErr<A, E>
-where
-    A: Service,
-    E: From<A::Error>,
+    where
+        A: Service,
+        E: From<A::Error>,
 {
     type Request = A::Request;
     type Response = A::Response;
@@ -76,9 +76,9 @@ pub struct FromErrFuture<A: Service, E> {
 }
 
 impl<A, E> Future for FromErrFuture<A, E>
-where
-    A: Service,
-    E: From<A::Error>,
+    where
+        A: Service,
+        E: From<A::Error>,
 {
     type Output = Result<A::Response, E>;
 
@@ -99,17 +99,17 @@ pub struct FromErrNewService<A, E> {
 impl<A, E> FromErrNewService<A, E> {
     /// Create new `FromErr` new service instance
     pub fn new(a: A) -> Self
-    where
-        A: NewService,
-        E: From<A::Error>,
+        where
+            A: NewService,
+            E: From<A::Error>,
     {
         Self { a, e: PhantomData }
     }
 }
 
 impl<A, E> Clone for FromErrNewService<A, E>
-where
-    A: Clone,
+    where
+        A: Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -120,9 +120,9 @@ where
 }
 
 impl<A, E> NewService for FromErrNewService<A, E>
-where
-    A: NewService,
-    E: From<A::Error>,
+    where
+        A: NewService,
+        E: From<A::Error>,
 {
     type Request = A::Request;
     type Response = A::Response;
@@ -143,9 +143,9 @@ where
 
 #[pin_project]
 pub struct FromErrNewServiceFuture<A, E>
-where
-    A: NewService,
-    E: From<A::Error>,
+    where
+        A: NewService,
+        E: From<A::Error>,
 {
     #[pin]
     fut: A::Future,
@@ -153,9 +153,9 @@ where
 }
 
 impl<A, E> Future for FromErrNewServiceFuture<A, E>
-where
-    A: NewService,
-    E: From<A::Error>,
+    where
+        A: NewService,
+        E: From<A::Error>,
 {
     type Output = Result<FromErr<A::Service, E>, A::InitError>;
 
@@ -184,6 +184,7 @@ mod tests {
 
     use super::*;
     use crate::{IntoNewService, NewService, Service, ServiceExt};
+    use tokio::future::ok;
 
     struct Srv;
 
@@ -214,10 +215,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_poll_ready() {
+    #[tokio::test]
+    async fn test_poll_ready() {
         let mut srv = Srv.from_err::<Error>();
-        let res = srv.poll_test();
+        let res = srv.poll_once().await;
 
         assert_eq!(res, Poll::Ready(Err(Error)));
     }
@@ -230,18 +231,14 @@ mod tests {
         assert_eq!(res.err().unwrap(), Error);
     }
 
-    /*
-    #[test]
-    fn test_new_service() {
-        let blank = || Ok::<_, ()>(Srv);
+
+    #[tokio::test]
+    async fn test_new_service() {
+        let blank = || ok::<_, ()>(Srv);
         let new_srv = blank.into_new_service().from_err::<Error>();
-        if let Poll::Ready(mut srv) = new_srv.new_service(&()).poll().unwrap() {
-            let res = srv.call(()).poll();
-            assert!(res.is_err());
-            assert_eq!(res.err().unwrap(), Error);
-        } else {
-            panic!()
-        }
+        let mut srv = new_srv.new_service(&()).await.unwrap();
+        let res = srv.call(()).await;
+        assert!(res.is_err());
+        assert_eq!(res.err().unwrap(), Error);
     }
-    */
 }
