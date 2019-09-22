@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use actix_rt::spawn;
 use actix_server_config::{Io, ServerConfig};
-use actix_service::{NewService, Service};
+use actix_service::{NewService, Service, ServiceExt};
 use futures::future::{err, ok, LocalBoxFuture, Ready};
-use futures::{Future, Poll};
+use futures::{Future, FutureExt, Poll, StreamExt, TryFutureExt};
 use log::error;
 
 use super::Token;
@@ -36,7 +36,7 @@ pub(crate) trait InternalServiceFactory: Send {
 
     fn clone_factory(&self) -> Box<dyn InternalServiceFactory>;
 
-    fn create(&self) -> LocalBoxFuture<Result<Vec<(BoxedServerService)>, ()>>;
+    fn create(&self) -> LocalBoxFuture<'static, Result<Vec<(Token, BoxedServerService)>, ()>>;
 }
 
 pub(crate) type BoxedServerService = Box<
@@ -90,10 +90,14 @@ where
                 });
 
                 if let Ok(stream) = stream {
-                    spawn(self.service.call(Io::new(stream)).then(move |res| {
-                        drop(guard);
-                        res.map_err(|_| ()).map(|_| ())
-                    }));
+                    let f = self.service.call(Io::new(stream));
+                    spawn(
+                        async move {
+                            f.await;
+                            drop(guard);
+                        }
+                            .boxed_local(),
+                    );
                     ok(())
                 } else {
                     err(())
@@ -152,19 +156,19 @@ where
         })
     }
 
-    fn create(&self) -> Box<dyn Future<Output = Result<Vec<(Token, BoxedServerService)>, ()>>> {
+    fn create(&self) -> LocalBoxFuture<'static, Result<Vec<(Token, BoxedServerService)>, ()>> {
         let token = self.token;
         let config = ServerConfig::new(self.addr);
-        Box::new(
-            self.inner
-                .create()
-                .new_service(&config)
-                .map_err(|_| ())
-                .map(move |inner| {
-                    let service: BoxedServerService = Box::new(StreamService::new(inner));
-                    vec![(token, service)]
-                }),
-        )
+
+        self.inner
+            .create()
+            .new_service(&config)
+            .map_err(|_| ())
+            .map_ok(move |inner| {
+                let service: BoxedServerService = Box::new(StreamService::new(inner));
+                vec![(token, service)]
+            })
+            .boxed_local()
     }
 }
 
@@ -177,7 +181,7 @@ impl InternalServiceFactory for Box<dyn InternalServiceFactory> {
         self.as_ref().clone_factory()
     }
 
-    fn create(&self) -> Box<dyn Future<Output = Result<Vec<(Token, BoxedServerService)>, ()>>> {
+    fn create(&self) -> LocalBoxFuture<'static, Result<Vec<(Token, BoxedServerService)>, ()>> {
         self.as_ref().create()
     }
 }

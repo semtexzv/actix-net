@@ -52,8 +52,6 @@ tokio-io = "0.2.0-alpha.4"
 tokio-net = { version = "0.2.0-alpha.4", features = ["signal"] }
 tokio-timer = "0.3.0-alpha.4"
 
-
-
 # unix domain sockets
 mio-uds = { version="0.6.7", optional = true }
 #tokio-uds = { version="0.2.5", optional = true }
@@ -63,13 +61,13 @@ native-tls = { version="0.2", optional = true }
 
 # openssl
 openssl = { version="0.10", optional = true }
-tokio-openssl = { version="0.3", optional = true }
+tokio-openssl = { version="0.4.0-alpha.4", optional = true }
 
 # rustls
-rustls = { version = "0.15.2", optional = true }
-tokio-rustls = { version = "0.9.1", optional = true }
-webpki = { version = "0.19", optional = true }
-webpki-roots = { version = "0.16", optional = true }
+rustls = { version = "0.16.0", optional = true }
+tokio-rustls = { version = "0.12.0-alpha.2", optional = true }
+webpki = { version = "0.21", optional = true }
+webpki-roots = { version = "0.17", optional = true }
 
 [dev-dependencies]
 bytes = "0.4"

@@ -1,13 +1,17 @@
 use std::io;
 
 use actix_rt::spawn;
-use futures::stream::futures_unordered;
-use futures::{Future, Poll, Stream, TryStream};
+use futures::stream::{futures_unordered, FuturesUnordered, LocalBoxStream};
+use futures::{
+    Future, FutureExt, Poll, Stream, StreamExt, TryFutureExt, TryStream, TryStreamExt,
+};
 
 use crate::server::Server;
+use actix_service::ServiceExt;
 use futures::future::LocalBoxFuture;
 use std::pin::Pin;
 use std::task::Context;
+use tokio_net::signal::unix::signal;
 
 /// Different types of process signals
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -30,7 +34,7 @@ pub(crate) struct Signals {
     streams: Vec<SigStream>,
 }
 
-type SigStream = Box<dyn TryStream<Ok = Signal, Error = io::Error>>;
+type SigStream = LocalBoxStream<'static, Result<Signal, io::Error>>;
 
 impl Signals {
     pub(crate) fn start(srv: Server) {
@@ -49,47 +53,66 @@ impl Signals {
             {
                 use tokio_net::signal::unix;
 
-                let mut sigs: Vec<LocalBoxFuture<'static, Result<SigStream, io::Error>>> =
-                    Vec::new();
-                sigs.push(Box::new(
-                    tokio_net::signal::unix::Signal::new(tokio_net::signal::unix::libc::SIGINT)
+                let mut sigs: Vec<_> = Vec::new();
+
+                let mut SIG_MAP = [
+                    (
+                        tokio_net::signal::unix::SignalKind::interrupt(),
+                        Signal::Int,
+                    ),
+                    (tokio_net::signal::unix::SignalKind::hangup(), Signal::Hup),
+                    (
+                        tokio_net::signal::unix::SignalKind::terminate(),
+                        Signal::Term,
+                    ),
+                    (tokio_net::signal::unix::SignalKind::quit(), Signal::Quit),
+                ];
+
+                for (kind, sig) in SIG_MAP.into_iter() {
+                    let sig = sig.clone();
+                    let fut = signal(*kind).unwrap();
+                    sigs.push(fut.map(move |_| Ok(sig)).boxed_local());
+                }
+                /* TODO: Finish rewriting this
+                sigs.push(
+                    tokio_net::signal::unix::signal(tokio_net::signal::si).unwrap()
                         .map(|stream| {
                             let s: SigStream = Box::new(stream.map(|_| Signal::Int));
                             s
-                        }),
-                ));
-                sigs.push(Box::new(
-                    tokio_net::signal::unix::Signal::new(tokio_net::signal::unix::libc::SIGHUP)
+                        }).boxed()
+                );
+                sigs.push(
+
+                    tokio_net::signal::unix::signal(tokio_net::signal::unix::SignalKind::hangup()).unwrap()
                         .map(|stream: unix::Signal| {
                             let s: SigStream = Box::new(stream.map(|_| Signal::Hup));
                             s
-                        }),
-                ));
-                sigs.push(Box::new(
-                    tokio_net::signal::unix::Signal::new(
-                        tokio_net::signal::unix::libc::SIGTERM,
-                    )
-                    .map(|stream| {
-                        let s: SigStream = Box::new(stream.map(|_| Signal::Term));
-                        s
-                    }),
-                ));
-                sigs.push(Box::new(
-                    tokio_net::signal::unix::Signal::new(
-                        tokio_net::signal::unix::libc::SIGQUIT,
-                    )
-                    .map(|stream| {
-                        let s: SigStream = Box::new(stream.map(|_| Signal::Quit));
-                        s
-                    }),
-                ));
-                futures_unordered(sigs)
-                    .collect()
-                    .map_err(|_| ())
-                    .and_then(move |streams| Signals { srv, streams })
+                        }).boxed()
+                );
+                sigs.push(
+                    tokio_net::signal::unix::signal(
+                        tokio_net::signal::unix::SignalKind::terminate()
+                    ).unwrap()
+                        .map(|stream| {
+                            let s: SigStream = Box::new(stream.map(|_| Signal::Term));
+                            s
+                        }).boxed(),
+                );
+                sigs.push(
+                    tokio_net::signal::unix::signal(
+                        tokio_net::signal::unix::SignalKind::quit()
+                    ).unwrap()
+                        .map(|stream| {
+                            let s: SigStream = Box::new(stream.map(|_| Signal::Quit));
+                            s
+                        }).boxed()
+                );
+                */
+
+                Signals { srv, streams: sigs }
             }
         };
-        spawn(fut);
+        spawn(async {});
     }
 }
 

@@ -2,11 +2,10 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::{mem, task, time};
 
-use actix_rt::{spawn, Arbiter};
 use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures::channel::oneshot;
-use futures::FutureExt;
 use futures::{future, Future, Poll, Stream, TryFutureExt};
+use futures::{FutureExt, StreamExt};
 use log::{error, info, trace};
 use tokio_timer::{sleep, Delay};
 
@@ -15,6 +14,8 @@ use crate::counter::Counter;
 use crate::services::{BoxedServerService, InternalServiceFactory, ServerMessage};
 use crate::socket::{SocketAddr, StdStream};
 use crate::Token;
+use actix_rt::spawn;
+use futures::future::{LocalBoxFuture, MapOk};
 use std::pin::Pin;
 use std::task::Context;
 
@@ -156,31 +157,36 @@ impl Worker {
             state: WorkerState::Unavailable(Vec::new()),
         });
 
-        let mut fut = Vec::new();
+        let mut fut: Vec<MapOk<LocalBoxFuture<'static, _>, _>> = Vec::new();
         for (idx, factory) in wrk.factories.iter().enumerate() {
-            fut.push(factory.create().map(move |res| {
-                res.into_iter()
-                    .map(|(t, s)| (idx, t, s))
+            fut.push(factory.create().map_ok(move |r| {
+                r.into_iter()
+                    .map(|(t, s): (Token, _)| (idx, t, s))
                     .collect::<Vec<_>>()
             }));
         }
+
         spawn(
-            future::join_all(fut)
-                .map_err(|e| {
-                    error!("Can not start worker: {:?}", e);
-                    Arbiter::current().stop();
-                })
-                .and_then(move |services| {
-                    for item in services {
-                        for (idx, token, service) in item {
-                            while token.0 >= wrk.services.len() {
-                                wrk.services.push(None);
+            async {
+                let mut res = future::join_all(fut).await;
+                let res: Result<Vec<_>, _> = res.into_iter().collect();
+                match res {
+                    Ok(services) => {
+                        for item in services {
+                            for (idx, token, service) in item {
+                                while token.0 >= wrk.services.len() {
+                                    wrk.services.push(None);
+                                }
                             }
-                            wrk.services[token.0] = Some((idx, service));
                         }
+                        Ok::<_, ()>(wrk);
                     }
-                    wrk
-                }),
+                    Err(e) => {
+                        //return Err(e);
+                    }
+                }
+            }
+                .boxed_local(),
         );
     }
 

@@ -43,7 +43,7 @@ impl Server {
     ///
     /// If socket contains some pending connection, they might be dropped.
     /// All opened connection remains active.
-    pub fn pause(&self) -> impl Future<Output = ()> {
+    pub fn pause(&self) -> impl Future<Output = Result<(), ()>> {
         let (tx, rx) = oneshot::channel();
         let _ = self.0.unbounded_send(ServerCommand::Pause(tx));
         rx.map_err(|_| ())

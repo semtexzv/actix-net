@@ -1,14 +1,16 @@
 use std::marker::PhantomData;
 
 use actix_service::{NewService, Service};
-use futures::{future::ok, future::Ready, Future, Poll};
-use openssl::ssl::{HandshakeError, SslAcceptor};
+use futures::{future::ok, future::Ready, Future, FutureExt, Poll};
+use openssl::ssl::SslAcceptor;
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_openssl::{AcceptAsync, SslAcceptorExt, SslStream};
+use tokio_openssl::{HandshakeError, SslStream};
 
 use crate::counter::{Counter, CounterGuard};
 use crate::ssl::MAX_CONN_COUNTER;
 use crate::{Io, Protocol, ServerConfig};
+use futures::future::LocalBoxFuture;
+use std::io;
 use std::pin::Pin;
 use std::task::Context;
 
@@ -39,7 +41,7 @@ impl<T: AsyncRead + AsyncWrite, P> Clone for OpensslAcceptor<T, P> {
     }
 }
 
-impl<T: AsyncRead + AsyncWrite, P> NewService for OpensslAcceptor<T, P> {
+impl<T: AsyncRead + AsyncWrite + Unpin + 'static, P> NewService for OpensslAcceptor<T, P> {
     type Request = Io<T, P>;
     type Response = Io<SslStream<T>, P>;
     type Error = HandshakeError<T>;
@@ -67,7 +69,7 @@ pub struct OpensslAcceptorService<T, P> {
     io: PhantomData<(T, P)>,
 }
 
-impl<T: AsyncRead + AsyncWrite, P> Service for OpensslAcceptorService<T, P> {
+impl<T: AsyncRead + AsyncWrite + Unpin + 'static, P> Service for OpensslAcceptorService<T, P> {
     type Request = Io<T, P>;
     type Response = Io<SslStream<T>, P>;
     type Error = HandshakeError<T>;
@@ -92,9 +94,14 @@ impl<T: AsyncRead + AsyncWrite, P> Service for OpensslAcceptorService<T, P> {
 
     fn call(&mut self, req: Self::Request) -> Self::Future {
         let (io, params, _) = req.into_parts();
+        let acc = self.acceptor.clone();
         OpensslAcceptorServiceFut {
             _guard: self.conns.get(),
-            fut: SslAcceptorExt::accept_async(&self.acceptor, io),
+            fut: async move {
+                let acc = acc;
+                tokio_openssl::accept(&acc, io).await
+            }
+                .boxed_local::<'static>(),
             params: Some(params),
         }
     }
@@ -104,7 +111,7 @@ pub struct OpensslAcceptorServiceFut<T, P>
 where
     T: AsyncRead + AsyncWrite,
 {
-    fut: AcceptAsync<T>,
+    fut: LocalBoxFuture<'static, Result<SslStream<T>, HandshakeError<T>>>,
     params: Option<P>,
     _guard: CounterGuard,
 }
