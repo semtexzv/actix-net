@@ -11,24 +11,24 @@ use std::task::Context;
 
 /// Apply tranform function to a service
 pub fn apply_fn<T, F, In, Out, U>(service: U, f: F) -> Apply<T, F, In, Out>
-    where
-        T: Service,
-        F: FnMut(In, &mut T) -> Out,
-        Out: IntoFuture,
-        Out::Error: From<T::Error>,
-        U: IntoService<T>,
+where
+    T: Service,
+    F: FnMut(In, &mut T) -> Out,
+    Out: IntoFuture,
+    Out::Error: From<T::Error>,
+    U: IntoService<T>,
 {
     Apply::new(service.into_service(), f)
 }
 
 /// Create factory for `apply` service.
 pub fn new_apply_fn<T, F, In, Out, U>(service: U, f: F) -> ApplyNewService<T, F, In, Out>
-    where
-        T: NewService,
-        F: FnMut(In, &mut T::Service) -> Out + Clone,
-        Out: IntoFuture,
-        Out::Error: From<T::Error>,
-        U: IntoNewService<T>,
+where
+    T: NewService,
+    F: FnMut(In, &mut T::Service) -> Out + Clone,
+    Out: IntoFuture,
+    Out::Error: From<T::Error>,
+    U: IntoNewService<T>,
 {
     ApplyNewService::new(service.into_new_service(), f)
 }
@@ -37,8 +37,8 @@ pub fn new_apply_fn<T, F, In, Out, U>(service: U, f: F) -> ApplyNewService<T, F,
 /// `Apply` service combinator
 #[pin_project]
 pub struct Apply<T, F, In, Out>
-    where
-        T: Service,
+where
+    T: Service,
 {
     #[pin]
     service: T,
@@ -47,11 +47,11 @@ pub struct Apply<T, F, In, Out>
 }
 
 impl<T, F, In, Out> Apply<T, F, In, Out>
-    where
-        T: Service,
-        F: FnMut(In, &mut T) -> Out,
-        Out: IntoFuture,
-        Out::Error: From<T::Error>,
+where
+    T: Service,
+    F: FnMut(In, &mut T) -> Out,
+    Out: IntoFuture,
+    Out::Error: From<T::Error>,
 {
     /// Create new `Apply` combinator
     pub(crate) fn new<I: IntoService<T>>(service: I, f: F) -> Self {
@@ -64,9 +64,9 @@ impl<T, F, In, Out> Apply<T, F, In, Out>
 }
 
 impl<T, F, In, Out> Clone for Apply<T, F, In, Out>
-    where
-        T: Service + Clone,
-        F: Clone,
+where
+    T: Service + Clone,
+    F: Clone,
 {
     fn clone(&self) -> Self {
         Apply {
@@ -78,11 +78,11 @@ impl<T, F, In, Out> Clone for Apply<T, F, In, Out>
 }
 
 impl<T, F, In, Out> Service for Apply<T, F, In, Out>
-    where
-        T: Service,
-        F: FnMut(In, &mut T) -> Out,
-        Out: IntoFuture,
-        Out::Error: From<T::Error>,
+where
+    T: Service,
+    F: FnMut(In, &mut T) -> Out,
+    Out: IntoFuture,
+    Out::Error: From<T::Error>,
 {
     type Request = In;
     type Response = Out::Item;
@@ -90,10 +90,10 @@ impl<T, F, In, Out> Service for Apply<T, F, In, Out>
     type Future = Out::Future;
 
     fn poll_ready(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         ctx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(ready!(self.project_into().service.poll_ready(ctx)).map_err(|e| e.into()))
+        Poll::Ready(ready!(self.project().service.poll_ready(ctx)).map_err(|e| e.into()))
     }
 
     fn call(&mut self, req: In) -> Self::Future {
@@ -103,8 +103,8 @@ impl<T, F, In, Out> Service for Apply<T, F, In, Out>
 
 /// `ApplyNewService` new service combinator
 pub struct ApplyNewService<T, F, In, Out>
-    where
-        T: NewService,
+where
+    T: NewService,
 {
     service: T,
     f: F,
@@ -112,11 +112,11 @@ pub struct ApplyNewService<T, F, In, Out>
 }
 
 impl<T, F, In, Out> ApplyNewService<T, F, In, Out>
-    where
-        T: NewService,
-        F: FnMut(In, &mut T::Service) -> Out + Clone,
-        Out: IntoFuture,
-        Out::Error: From<T::Error>,
+where
+    T: NewService,
+    F: FnMut(In, &mut T::Service) -> Out + Clone,
+    Out: IntoFuture,
+    Out::Error: From<T::Error>,
 {
     /// Create new `ApplyNewService` new service instance
     pub(crate) fn new<F1: IntoNewService<T>>(service: F1, f: F) -> Self {
@@ -129,10 +129,10 @@ impl<T, F, In, Out> ApplyNewService<T, F, In, Out>
 }
 
 impl<T, F, In, Out> Clone for ApplyNewService<T, F, In, Out>
-    where
-        T: NewService + Clone,
-        F: FnMut(In, &mut T::Service) -> Out + Clone,
-        Out: IntoFuture,
+where
+    T: NewService + Clone,
+    F: FnMut(In, &mut T::Service) -> Out + Clone,
+    Out: IntoFuture,
 {
     fn clone(&self) -> Self {
         Self {
@@ -144,11 +144,11 @@ impl<T, F, In, Out> Clone for ApplyNewService<T, F, In, Out>
 }
 
 impl<T, F, In, Out> NewService for ApplyNewService<T, F, In, Out>
-    where
-        T: NewService,
-        F: FnMut(In, &mut T::Service) -> Out + Clone,
-        Out: IntoFuture,
-        Out::Error: From<T::Error>,
+where
+    T: NewService,
+    F: FnMut(In, &mut T::Service) -> Out + Clone,
+    Out: IntoFuture,
+    Out::Error: From<T::Error>,
 {
     type Request = In;
     type Response = Out::Item;
@@ -166,10 +166,10 @@ impl<T, F, In, Out> NewService for ApplyNewService<T, F, In, Out>
 
 #[pin_project]
 pub struct ApplyNewServiceFuture<T, F, In, Out>
-    where
-        T: NewService,
-        F: FnMut(In, &mut T::Service) -> Out + Clone,
-        Out: IntoFuture,
+where
+    T: NewService,
+    F: FnMut(In, &mut T::Service) -> Out + Clone,
+    Out: IntoFuture,
 {
     #[pin]
     fut: T::Future,
@@ -178,10 +178,10 @@ pub struct ApplyNewServiceFuture<T, F, In, Out>
 }
 
 impl<T, F, In, Out> ApplyNewServiceFuture<T, F, In, Out>
-    where
-        T: NewService,
-        F: FnMut(In, &mut T::Service) -> Out + Clone,
-        Out: IntoFuture,
+where
+    T: NewService,
+    F: FnMut(In, &mut T::Service) -> Out + Clone,
+    Out: IntoFuture,
 {
     fn new(fut: T::Future, f: F) -> Self {
         ApplyNewServiceFuture {
@@ -193,16 +193,16 @@ impl<T, F, In, Out> ApplyNewServiceFuture<T, F, In, Out>
 }
 
 impl<T, F, In, Out> Future for ApplyNewServiceFuture<T, F, In, Out>
-    where
-        T: NewService,
-        F: FnMut(In, &mut T::Service) -> Out + Clone,
-        Out: IntoFuture,
-        Out::Error: From<T::Error>,
+where
+    T: NewService,
+    F: FnMut(In, &mut T::Service) -> Out + Clone,
+    Out: IntoFuture,
+    Out::Error: From<T::Error>,
 {
     type Output = Result<Apply<T::Service, F, In, Out>, T::InitError>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project_into();
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
         if let Poll::Ready(svc) = this.fut.poll(cx)? {
             Poll::Ready(Ok(Apply::new(svc, this.f.take().unwrap())))
         } else {

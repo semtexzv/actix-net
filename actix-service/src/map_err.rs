@@ -23,9 +23,9 @@ pub struct MapErr<A, F, E> {
 impl<A, F, E> MapErr<A, F, E> {
     /// Create new `MapErr` combinator
     pub fn new(service: A, f: F) -> Self
-        where
-            A: Service,
-            F: Fn(A::Error) -> E,
+    where
+        A: Service,
+        F: Fn(A::Error) -> E,
     {
         Self {
             service,
@@ -36,9 +36,9 @@ impl<A, F, E> MapErr<A, F, E> {
 }
 
 impl<A, F, E> Clone for MapErr<A, F, E>
-    where
-        A: Clone,
-        F: Clone,
+where
+    A: Clone,
+    F: Clone,
 {
     fn clone(&self) -> Self {
         MapErr {
@@ -50,9 +50,9 @@ impl<A, F, E> Clone for MapErr<A, F, E>
 }
 
 impl<A, F, E> Service for MapErr<A, F, E>
-    where
-        A: Service,
-        F: Fn(A::Error) -> E + Clone,
+where
+    A: Service,
+    F: Fn(A::Error) -> E + Clone,
 {
     type Request = A::Request;
     type Response = A::Response;
@@ -63,7 +63,8 @@ impl<A, F, E> Service for MapErr<A, F, E>
         mut self: Pin<&mut Self>,
         ctx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.project().service.poll_ready(ctx).map_err(&self.f)
+        let mut this = self.project();
+        this.service.poll_ready(ctx).map_err(this.f)
     }
 
     fn call(&mut self, req: A::Request) -> Self::Future {
@@ -73,9 +74,9 @@ impl<A, F, E> Service for MapErr<A, F, E>
 
 #[pin_project]
 pub struct MapErrFuture<A, F, E>
-    where
-        A: Service,
-        F: Fn(A::Error) -> E,
+where
+    A: Service,
+    F: Fn(A::Error) -> E,
 {
     f: F,
     #[pin]
@@ -83,9 +84,9 @@ pub struct MapErrFuture<A, F, E>
 }
 
 impl<A, F, E> MapErrFuture<A, F, E>
-    where
-        A: Service,
-        F: Fn(A::Error) -> E,
+where
+    A: Service,
+    F: Fn(A::Error) -> E,
 {
     fn new(fut: A::Future, f: F) -> Self {
         MapErrFuture { f, fut }
@@ -93,14 +94,15 @@ impl<A, F, E> MapErrFuture<A, F, E>
 }
 
 impl<A, F, E> Future for MapErrFuture<A, F, E>
-    where
-        A: Service,
-        F: Fn(A::Error) -> E,
+where
+    A: Service,
+    F: Fn(A::Error) -> E,
 {
     type Output = Result<A::Response, E>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.project().fut.poll(cx).map_err(&self.f)
+        let mut this = self.project();
+        this.fut.poll(cx).map_err(this.f)
     }
 }
 
@@ -109,9 +111,9 @@ impl<A, F, E> Future for MapErrFuture<A, F, E>
 ///
 /// This is created by the `NewServiceExt::map_err` method.
 pub struct MapErrNewService<A, F, E>
-    where
-        A: NewService,
-        F: Fn(A::Error) -> E + Clone,
+where
+    A: NewService,
+    F: Fn(A::Error) -> E + Clone,
 {
     a: A,
     f: F,
@@ -119,9 +121,9 @@ pub struct MapErrNewService<A, F, E>
 }
 
 impl<A, F, E> MapErrNewService<A, F, E>
-    where
-        A: NewService,
-        F: Fn(A::Error) -> E + Clone,
+where
+    A: NewService,
+    F: Fn(A::Error) -> E + Clone,
 {
     /// Create new `MapErr` new service instance
     pub fn new(a: A, f: F) -> Self {
@@ -134,9 +136,9 @@ impl<A, F, E> MapErrNewService<A, F, E>
 }
 
 impl<A, F, E> Clone for MapErrNewService<A, F, E>
-    where
-        A: NewService + Clone,
-        F: Fn(A::Error) -> E + Clone,
+where
+    A: NewService + Clone,
+    F: Fn(A::Error) -> E + Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -148,9 +150,9 @@ impl<A, F, E> Clone for MapErrNewService<A, F, E>
 }
 
 impl<A, F, E> NewService for MapErrNewService<A, F, E>
-    where
-        A: NewService,
-        F: Fn(A::Error) -> E + Clone,
+where
+    A: NewService,
+    F: Fn(A::Error) -> E + Clone,
 {
     type Request = A::Request;
     type Response = A::Response;
@@ -168,9 +170,9 @@ impl<A, F, E> NewService for MapErrNewService<A, F, E>
 
 #[pin_project]
 pub struct MapErrNewServiceFuture<A, F, E>
-    where
-        A: NewService,
-        F: Fn(A::Error) -> E,
+where
+    A: NewService,
+    F: Fn(A::Error) -> E,
 {
     #[pin]
     fut: A::Future,
@@ -178,9 +180,9 @@ pub struct MapErrNewServiceFuture<A, F, E>
 }
 
 impl<A, F, E> MapErrNewServiceFuture<A, F, E>
-    where
-        A: NewService,
-        F: Fn(A::Error) -> E,
+where
+    A: NewService,
+    F: Fn(A::Error) -> E,
 {
     fn new(fut: A::Future, f: F) -> Self {
         MapErrNewServiceFuture { f, fut }
@@ -188,14 +190,14 @@ impl<A, F, E> MapErrNewServiceFuture<A, F, E>
 }
 
 impl<A, F, E> Future for MapErrNewServiceFuture<A, F, E>
-    where
-        A: NewService,
-        F: Fn(A::Error) -> E + Clone,
+where
+    A: NewService,
+    F: Fn(A::Error) -> E + Clone,
 {
     type Output = Result<MapErr<A::Service, F, E>, A::InitError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project_into();
+        let this = self.project();
         if let Poll::Ready(svc) = this.fut.poll(cx)? {
             Poll::Ready(Ok(MapErr::new(svc, this.f.clone())))
         } else {
@@ -251,7 +253,6 @@ mod tests {
         assert!(res.is_err());
         assert_eq!(res.err().unwrap(), "error");
     }
-
 
     #[tokio::test]
     async fn test_new_service() {

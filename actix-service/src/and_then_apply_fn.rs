@@ -12,12 +12,12 @@ use pin_project::pin_project;
 /// `Apply` service combinator
 #[pin_project]
 pub struct AndThenApply<A, B, F, Out>
-    where
-        A: Service,
-        B: Service<Error=A::Error>,
-        F: FnMut(A::Response, &mut B) -> Out,
-        Out: IntoFuture,
-        Out::Error: Into<A::Error>,
+where
+    A: Service,
+    B: Service<Error = A::Error>,
+    F: FnMut(A::Response, &mut B) -> Out,
+    Out: IntoFuture,
+    Out::Error: Into<A::Error>,
 {
     #[pin]
     a: A,
@@ -25,16 +25,16 @@ pub struct AndThenApply<A, B, F, Out>
     b: Cell<B>,
     #[pin]
     f: Cell<F>,
-    r: PhantomData<(Out, )>,
+    r: PhantomData<(Out,)>,
 }
 
 impl<A, B, F, Out> AndThenApply<A, B, F, Out>
-    where
-        A: Service,
-        B: Service<Error=A::Error>,
-        F: FnMut(A::Response, &mut B) -> Out,
-        Out: IntoFuture,
-        Out::Error: Into<A::Error>,
+where
+    A: Service,
+    B: Service<Error = A::Error>,
+    F: FnMut(A::Response, &mut B) -> Out,
+    Out: IntoFuture,
+    Out::Error: Into<A::Error>,
 {
     /// Create new `Apply` combinator
     pub fn new<A1: IntoService<A>, B1: IntoService<B>>(a: A1, b: B1, f: F) -> Self {
@@ -48,12 +48,12 @@ impl<A, B, F, Out> AndThenApply<A, B, F, Out>
 }
 
 impl<A, B, F, Out> Clone for AndThenApply<A, B, F, Out>
-    where
-        A: Service + Clone,
-        B: Service<Error=A::Error>,
-        F: FnMut(A::Response, &mut B) -> Out,
-        Out: IntoFuture,
-        Out::Error: Into<A::Error>,
+where
+    A: Service + Clone,
+    B: Service<Error = A::Error>,
+    F: FnMut(A::Response, &mut B) -> Out,
+    Out: IntoFuture,
+    Out::Error: Into<A::Error>,
 {
     fn clone(&self) -> Self {
         AndThenApply {
@@ -66,12 +66,12 @@ impl<A, B, F, Out> Clone for AndThenApply<A, B, F, Out>
 }
 
 impl<A, B, F, Out> Service for AndThenApply<A, B, F, Out>
-    where
-        A: Service,
-        B: Service<Error=A::Error>,
-        F: FnMut(A::Response, &mut B) -> Out,
-        Out: IntoFuture,
-        Out::Error: Into<A::Error>,
+where
+    A: Service,
+    B: Service<Error = A::Error>,
+    F: FnMut(A::Response, &mut B) -> Out,
+    Out: IntoFuture,
+    Out::Error: Into<A::Error>,
 {
     type Request = A::Request;
     type Response = Out::Item;
@@ -79,10 +79,10 @@ impl<A, B, F, Out> Service for AndThenApply<A, B, F, Out>
     type Future = AndThenApplyFuture<A, B, F, Out>;
 
     fn poll_ready(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         ctx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        let this = self.project_into();
+        let this = self.project();
         let not_ready = !this.a.poll_ready(ctx)?.is_ready();
         if !this.b.get_pin().poll_ready(ctx).is_ready() || not_ready {
             Poll::Pending
@@ -103,12 +103,12 @@ impl<A, B, F, Out> Service for AndThenApply<A, B, F, Out>
 
 #[pin_project]
 pub struct AndThenApplyFuture<A, B, F, Out>
-    where
-        A: Service,
-        B: Service<Error=A::Error>,
-        F: FnMut(A::Response, &mut B) -> Out,
-        Out: IntoFuture,
-        Out::Error: Into<A::Error>,
+where
+    A: Service,
+    B: Service<Error = A::Error>,
+    F: FnMut(A::Response, &mut B) -> Out,
+    Out: IntoFuture,
+    Out::Error: Into<A::Error>,
 {
     b: Cell<B>,
     f: Cell<F>,
@@ -119,37 +119,38 @@ pub struct AndThenApplyFuture<A, B, F, Out>
 }
 
 impl<A, B, F, Out> Future for AndThenApplyFuture<A, B, F, Out>
-    where
-        A: Service,
-        B: Service<Error=A::Error>,
-        F: FnMut(A::Response, &mut B) -> Out,
-        Out: IntoFuture,
-        Out::Error: Into<A::Error>,
+where
+    A: Service,
+    B: Service<Error = A::Error>,
+    F: FnMut(A::Response, &mut B) -> Out,
+    Out: IntoFuture,
+    Out::Error: Into<A::Error>,
 {
     type Output = Result<Out::Item, A::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
-        if let Some(fut) = this.fut_b.as_mut().as_pin_mut() {
-            return fut.poll(cx).map_err(|e| e.into());
-        }
+        loop {
+            if let Some(fut) = this.fut_b.as_mut().as_pin_mut() {
+                return fut.poll(cx).map_err(|e| e.into());
+            }
 
-        match this
-            .fut_a
-            .as_mut()
-            .as_pin_mut()
-            .expect("Bug in actix-service")
-            .poll(cx)?
+            match this
+                .fut_a
+                .as_mut()
+                .as_pin_mut()
+                .expect("Bug in actix-service")
+                .poll(cx)?
             {
                 Poll::Ready(resp) => {
                     this.fut_a.set(None);
                     this.fut_b.set(Some(
                         (&mut *this.f.get_mut())(resp, this.b.get_mut()).into_future(),
                     ));
-                    self.poll(cx)
                 }
-                Poll::Pending => Poll::Pending,
+                Poll::Pending => return Poll::Pending,
             }
+        }
     }
 }
 
@@ -162,12 +163,12 @@ pub struct AndThenApplyNewService<A, B, F, Out> {
 }
 
 impl<A, B, F, Out> AndThenApplyNewService<A, B, F, Out>
-    where
-        A: NewService,
-        B: NewService<Config=A::Config, Error=A::Error, InitError=A::InitError>,
-        F: FnMut(A::Response, &mut B::Service) -> Out,
-        Out: IntoFuture,
-        Out::Error: Into<A::Error>,
+where
+    A: NewService,
+    B: NewService<Config = A::Config, Error = A::Error, InitError = A::InitError>,
+    F: FnMut(A::Response, &mut B::Service) -> Out,
+    Out: IntoFuture,
+    Out::Error: Into<A::Error>,
 {
     /// Create new `ApplyNewService` new service instance
     pub fn new<A1: IntoNewService<A>, B1: IntoNewService<B>>(a: A1, b: B1, f: F) -> Self {
@@ -181,9 +182,9 @@ impl<A, B, F, Out> AndThenApplyNewService<A, B, F, Out>
 }
 
 impl<A, B, F, Out> Clone for AndThenApplyNewService<A, B, F, Out>
-    where
-        A: Clone,
-        B: Clone,
+where
+    A: Clone,
+    B: Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -196,12 +197,12 @@ impl<A, B, F, Out> Clone for AndThenApplyNewService<A, B, F, Out>
 }
 
 impl<A, B, F, Out> NewService for AndThenApplyNewService<A, B, F, Out>
-    where
-        A: NewService,
-        B: NewService<Config=A::Config, Error=A::Error, InitError=A::InitError>,
-        F: FnMut(A::Response, &mut B::Service) -> Out,
-        Out: IntoFuture,
-        Out::Error: Into<A::Error>,
+where
+    A: NewService,
+    B: NewService<Config = A::Config, Error = A::Error, InitError = A::InitError>,
+    F: FnMut(A::Response, &mut B::Service) -> Out,
+    Out: IntoFuture,
+    Out::Error: Into<A::Error>,
 {
     type Request = A::Request;
     type Response = Out::Item;
@@ -224,12 +225,12 @@ impl<A, B, F, Out> NewService for AndThenApplyNewService<A, B, F, Out>
 
 #[pin_project]
 pub struct AndThenApplyNewServiceFuture<A, B, F, Out>
-    where
-        A: NewService,
-        B: NewService<Error=A::Error, InitError=A::InitError>,
-        F: FnMut(A::Response, &mut B::Service) -> Out,
-        Out: IntoFuture,
-        Out::Error: Into<A::Error>,
+where
+    A: NewService,
+    B: NewService<Error = A::Error, InitError = A::InitError>,
+    F: FnMut(A::Response, &mut B::Service) -> Out,
+    Out: IntoFuture,
+    Out::Error: Into<A::Error>,
 {
     #[pin]
     fut_b: B::Future,
@@ -241,12 +242,12 @@ pub struct AndThenApplyNewServiceFuture<A, B, F, Out>
 }
 
 impl<A, B, F, Out> Future for AndThenApplyNewServiceFuture<A, B, F, Out>
-    where
-        A: NewService,
-        B: NewService<Error=A::Error, InitError=A::InitError>,
-        F: FnMut(A::Response, &mut B::Service) -> Out,
-        Out: IntoFuture,
-        Out::Error: Into<A::Error>,
+where
+    A: NewService,
+    B: NewService<Error = A::Error, InitError = A::InitError>,
+    F: FnMut(A::Response, &mut B::Service) -> Out,
+    Out: IntoFuture,
+    Out::Error: Into<A::Error>,
 {
     type Output = Result<AndThenApply<A::Service, B::Service, F, Out>, A::InitError>;
 
@@ -308,7 +309,6 @@ mod tests {
             ok(())
         }
     }
-
 
     #[tokio::test]
     async fn test_call() {

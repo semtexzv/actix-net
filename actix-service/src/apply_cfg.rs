@@ -145,7 +145,7 @@ where
     type Output = Result<S, R::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        Poll::Ready(Ok(ready!(self.project_into().fut.poll(cx))?.into_service()))
+        Poll::Ready(Ok(ready!(self.project().fut.poll(cx))?.into_service()))
     }
 }
 
@@ -249,34 +249,34 @@ where
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
-        if let Some(fut) = this.srv_fut.as_mut().as_pin_mut() {
-            match fut.poll(cx)? {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(srv) => {
-                    this.srv_fut.set(None);
-                    this.srv.set(Some(srv));
-                    return self.poll(cx);
+        'poll: loop {
+            if let Some(fut) = this.srv_fut.as_mut().as_pin_mut() {
+                match fut.poll(cx)? {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(srv) => {
+                        this.srv_fut.set(None);
+                        this.srv.set(Some(srv));
+                        continue 'poll;
+                    }
                 }
             }
-        }
 
-        if let Some(fut) = this.fut.as_mut().as_pin_mut() {
-            Poll::Ready(Ok(ready!(fut.poll(cx))?.into_service()))
-        } else if let Some(mut srv) = this.srv.as_mut().as_pin_mut() {
-            match srv.as_mut().poll_ready(cx)? {
-                Poll::Ready(_) => {
-                    unsafe {
+            if let Some(fut) = this.fut.as_mut().as_pin_mut() {
+                return Poll::Ready(Ok(ready!(fut.poll(cx))?.into_service()));
+            } else if let Some(mut srv) = this.srv.as_mut().as_pin_mut() {
+                match srv.as_mut().poll_ready(cx)? {
+                    Poll::Ready(_) => {
                         this.fut.set(Some(
-                            this.f.get_mut()(&this.cfg, Pin::get_unchecked_mut(srv))
+                            this.f.get_mut()(&this.cfg, unsafe { Pin::get_unchecked_mut(srv) })
                                 .into_future(),
                         ));
+                        continue 'poll;
                     }
-                    self.poll(cx)
+                    Poll::Pending => return Poll::Pending,
                 }
-                Poll::Pending => Poll::Pending,
+            } else {
+                return Poll::Pending;
             }
-        } else {
-            Poll::Pending
         }
     }
 }

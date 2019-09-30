@@ -22,9 +22,9 @@ pub struct Map<A, F, Response> {
 impl<A, F, Response> Map<A, F, Response> {
     /// Create new `Map` combinator
     pub fn new(service: A, f: F) -> Self
-        where
-            A: Service,
-            F: FnMut(A::Response) -> Response,
+    where
+        A: Service,
+        F: FnMut(A::Response) -> Response,
     {
         Self {
             service,
@@ -35,9 +35,9 @@ impl<A, F, Response> Map<A, F, Response> {
 }
 
 impl<A, F, Response> Clone for Map<A, F, Response>
-    where
-        A: Clone,
-        F: Clone,
+where
+    A: Clone,
+    F: Clone,
 {
     fn clone(&self) -> Self {
         Map {
@@ -49,9 +49,9 @@ impl<A, F, Response> Clone for Map<A, F, Response>
 }
 
 impl<A, F, Response> Service for Map<A, F, Response>
-    where
-        A: Service,
-        F: FnMut(A::Response) -> Response + Clone,
+where
+    A: Service,
+    F: FnMut(A::Response) -> Response + Clone,
 {
     type Request = A::Request;
     type Response = Response;
@@ -62,7 +62,7 @@ impl<A, F, Response> Service for Map<A, F, Response>
         self: Pin<&mut Self>,
         ctx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        self.project_into().service.poll_ready(ctx)
+        self.project().service.poll_ready(ctx)
     }
 
     fn call(&mut self, req: A::Request) -> Self::Future {
@@ -72,9 +72,9 @@ impl<A, F, Response> Service for Map<A, F, Response>
 
 #[pin_project]
 pub struct MapFuture<A, F, Response>
-    where
-        A: Service,
-        F: FnMut(A::Response) -> Response,
+where
+    A: Service,
+    F: FnMut(A::Response) -> Response,
 {
     f: F,
     #[pin]
@@ -82,9 +82,9 @@ pub struct MapFuture<A, F, Response>
 }
 
 impl<A, F, Response> MapFuture<A, F, Response>
-    where
-        A: Service,
-        F: FnMut(A::Response) -> Response,
+where
+    A: Service,
+    F: FnMut(A::Response) -> Response,
 {
     fn new(fut: A::Future, f: F) -> Self {
         MapFuture { f, fut }
@@ -92,14 +92,14 @@ impl<A, F, Response> MapFuture<A, F, Response>
 }
 
 impl<A, F, Response> Future for MapFuture<A, F, Response>
-    where
-        A: Service,
-        F: FnMut(A::Response) -> Response,
+where
+    A: Service,
+    F: FnMut(A::Response) -> Response,
 {
     type Output = Result<Response, A::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project_into();
+        let this = self.project();
         match this.fut.poll(cx) {
             Poll::Ready(Ok(resp)) => Poll::Ready(Ok((this.f)(resp))),
             Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
@@ -118,9 +118,9 @@ pub struct MapNewService<A, F, Res> {
 impl<A, F, Res> MapNewService<A, F, Res> {
     /// Create new `Map` new service instance
     pub fn new(a: A, f: F) -> Self
-        where
-            A: NewService,
-            F: FnMut(A::Response) -> Res,
+    where
+        A: NewService,
+        F: FnMut(A::Response) -> Res,
     {
         Self {
             a,
@@ -131,9 +131,9 @@ impl<A, F, Res> MapNewService<A, F, Res> {
 }
 
 impl<A, F, Res> Clone for MapNewService<A, F, Res>
-    where
-        A: Clone,
-        F: Clone,
+where
+    A: Clone,
+    F: Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -145,9 +145,9 @@ impl<A, F, Res> Clone for MapNewService<A, F, Res>
 }
 
 impl<A, F, Res> NewService for MapNewService<A, F, Res>
-    where
-        A: NewService,
-        F: FnMut(A::Response) -> Res + Clone,
+where
+    A: NewService,
+    F: FnMut(A::Response) -> Res + Clone,
 {
     type Request = A::Request;
     type Response = Res;
@@ -165,9 +165,9 @@ impl<A, F, Res> NewService for MapNewService<A, F, Res>
 
 #[pin_project]
 pub struct MapNewServiceFuture<A, F, Res>
-    where
-        A: NewService,
-        F: FnMut(A::Response) -> Res,
+where
+    A: NewService,
+    F: FnMut(A::Response) -> Res,
 {
     #[pin]
     fut: A::Future,
@@ -175,9 +175,9 @@ pub struct MapNewServiceFuture<A, F, Res>
 }
 
 impl<A, F, Res> MapNewServiceFuture<A, F, Res>
-    where
-        A: NewService,
-        F: FnMut(A::Response) -> Res,
+where
+    A: NewService,
+    F: FnMut(A::Response) -> Res,
 {
     fn new(fut: A::Future, f: F) -> Self {
         MapNewServiceFuture { f: Some(f), fut }
@@ -185,14 +185,14 @@ impl<A, F, Res> MapNewServiceFuture<A, F, Res>
 }
 
 impl<A, F, Res> Future for MapNewServiceFuture<A, F, Res>
-    where
-        A: NewService,
-        F: FnMut(A::Response) -> Res,
+where
+    A: NewService,
+    F: FnMut(A::Response) -> Res,
 {
     type Output = Result<Map<A::Service, F, Res>, A::InitError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project_into();
+        let this = self.project();
         if let Poll::Ready(svc) = this.fut.poll(cx)? {
             Poll::Ready(Ok(Map::new(svc, this.f.take().unwrap())))
         } else {
@@ -242,7 +242,6 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), "ok");
     }
-
 
     #[tokio::test]
     async fn test_new_service() {

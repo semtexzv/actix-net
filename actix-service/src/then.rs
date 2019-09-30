@@ -56,7 +56,7 @@ where
         self: Pin<&mut Self>,
         ctx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        let this = self.project_into();
+        let this = self.project();
         let not_ready = !this.a.poll_ready(ctx)?.is_ready();
         if !this.b.get_pin().poll_ready(ctx)?.is_ready() || not_ready {
             Poll::Pending
@@ -105,30 +105,30 @@ where
     type Output = Result<B::Response, B::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
+        let mut this = self.project();
 
-        let mut fut_a = this.fut_a;
-        let mut fut_b = this.fut_b;
+        loop {
+            let mut fut_a = this.fut_a.as_mut();
+            let mut fut_b = this.fut_b.as_mut();
 
-        if let Some(fut) = fut_b.as_mut().as_pin_mut() {
-            return fut.poll(cx);
-        }
-
-        match fut_a
-            .as_mut()
-            .as_pin_mut()
-            .expect("Bug in actix-service")
-            .poll(cx)
-        {
-            Poll::Ready(r) => {
-                fut_a.set(None);
-                let new_fut = this.b.get_mut().call(r);
-                fut_b.set(Some(new_fut));
-
-                self.poll(cx)
+            if let Some(fut) = fut_b.as_mut().as_pin_mut() {
+                return fut.poll(cx);
             }
 
-            Poll::Pending => Poll::Pending,
+            match fut_a
+                .as_mut()
+                .as_pin_mut()
+                .expect("Bug in actix-service")
+                .poll(cx)
+            {
+                Poll::Ready(r) => {
+                    fut_a.set(None);
+                    let new_fut = this.b.get_mut().call(r);
+                    fut_b.set(Some(new_fut));
+                }
+
+                Poll::Pending => return Poll::Pending,
+            }
         }
     }
 }
@@ -248,7 +248,7 @@ where
     type Output = Result<Then<A::Service, B::Service>, A::InitError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project_into();
+        let this = self.project();
         if this.a.is_none() {
             if let Poll::Ready(service) = this.fut_a.poll(cx)? {
                 *this.a = Some(service);

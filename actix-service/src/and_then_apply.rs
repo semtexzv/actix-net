@@ -104,8 +104,8 @@ where
 {
     type Output = Result<AndThen<FromErr<A::Service, T::Error>, T::Transform>, T::InitError>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut this = self.project_into();
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
 
         if this.fut_t.is_none() {
             if let Poll::Ready(svc) = this.fut_b.poll(cx)? {
@@ -182,7 +182,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_new_service() {
-
         let blank = move || ok::<_, ()>((|req| ok(req)).into_service());
 
         let new_srv = blank.into_new_service().apply(

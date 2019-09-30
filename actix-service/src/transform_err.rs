@@ -86,7 +86,7 @@ where
     type Output = Result<T::Transform, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project_into();
+        let this = self.project();
         this.fut.poll(cx).map_err(this.f)
     }
 }
@@ -163,6 +163,6 @@ where
     type Output = Result<T::Transform, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.project_into().fut.poll(cx).map_err(E::from)
+        self.project().fut.poll(cx).map_err(E::from)
     }
 }

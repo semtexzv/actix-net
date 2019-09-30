@@ -76,6 +76,7 @@ where
     type Service = BoxedService<Req, Res, Err>;
 
     type Future = LocalBoxFuture<'static, Result<Self::Service, InitErr>>;
+
     fn new_service(&self, cfg: &C) -> Self::Future {
         self.0.new_service(cfg)
     }
