@@ -5,6 +5,9 @@ use futures::future::{ok, Ready};
 use futures::{Future, Poll};
 
 use super::counter::{Counter, CounterGuard};
+use std::pin::Pin;
+use std::task::Context;
+use pin_project::pin_project;
 
 /// InFlight - new service for service that can limit number of in-flight
 /// async requests.
@@ -39,8 +42,10 @@ impl<S: Service> Transform<S> for InFlight {
     }
 }
 
+#[pin_project]
 pub struct InFlightService<S> {
     count: Counter,
+    #[pin]
     service: S,
 }
 
@@ -58,7 +63,7 @@ where
         }
     }
 }
-/*
+
 impl<T> Service for InFlightService<T>
 where
     T: Service,
@@ -68,40 +73,43 @@ where
     type Error = T::Error;
     type Future = InFlightServiceResponse<T>;
 
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        if let Poll::Pending = self.service.poll_ready()? {
-            Ok(Poll::Pending)
-        } else if !self.count.available() {
+    fn poll_ready(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let this = self.project();
+        if let Poll::Pending = this.service.poll_ready(ctx)? {
+            Poll::Pending
+        } else if !this.count.available() {
             log::trace!("InFlight limit exceeded");
-            Ok(Poll::Pending)
+            Poll::Pending
         } else {
-            Ok(Poll::Ready(()))
+            Poll::Ready(Ok(()))
         }
     }
 
     fn call(&mut self, req: T::Request) -> Self::Future {
+        // TODO: Another place where we might wanna pass ctx into call method or rethink the design
         InFlightServiceResponse {
             fut: self.service.call(req),
-            _guard: self.count.get(),
+            _guard: unimplemented!() //self.count.get(),
         }
     }
 }
-*/
+
 #[doc(hidden)]
+#[pin_project]
 pub struct InFlightServiceResponse<T: Service> {
+    #[pin]
     fut: T::Future,
     _guard: CounterGuard,
 }
-/*
-impl<T: Service> Future for InFlightServiceResponse<T> {
-    type Item = T::Response;
-    type Error = T::Error;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        self.fut.poll()
+impl<T: Service> Future for InFlightServiceResponse<T> {
+    type Output = Result<T::Response,T::Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.project().fut.poll(cx)
     }
 }
-*/
+
 
 #[cfg(test)]
 mod tests {

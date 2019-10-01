@@ -7,6 +7,8 @@ use futures::{Future, Poll};
 use tokio_timer::sleep;
 
 use super::cell::Cell;
+use std::pin::Pin;
+use std::task::Context;
 
 #[derive(Clone, Debug)]
 pub struct LowResTime(Cell<Inner>);
@@ -79,32 +81,30 @@ impl LowResTimeService {
                 b.resolution
             };
 
-            tokio_executor::current_thread::spawn(sleep(interval).map_err(|_| panic!()).and_then(
-                move |_| {
-                    inner.get_mut().current.take();
-                    Ok(())
-                },
-            ));
+            tokio_executor::current_thread::spawn(async move {
+                sleep(interval).await;
+                inner.get_mut().current.take();
+            });
             now
         }
     }
 }
-/*
+
 impl Service for LowResTimeService {
     type Request = ();
     type Response = Instant;
     type Error = Infallible;
     type Future = Ready<Result<Self::Response, Self::Error>>;
 
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        Ok(Poll::Ready(()))
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, _: ()) -> Self::Future {
         ok(self.now())
     }
 }
-*/
+
 #[derive(Clone, Debug)]
 pub struct SystemTime(Cell<SystemTimeInner>);
 
@@ -146,12 +146,10 @@ impl SystemTimeService {
                 b.resolution
             };
 
-            tokio_executor::current_thread::spawn(sleep(interval).map_err(|_| panic!()).and_then(
-                move |_| {
-                    inner.get_mut().current.take();
-                    Ok(())
-                },
-            ));
+            tokio_executor::current_thread::spawn(async move {
+                sleep(interval).await;
+                inner.get_mut().current.take();
+            });
             now
         }
     }

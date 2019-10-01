@@ -1,14 +1,19 @@
 use std::collections::VecDeque;
-use std::convert::Infallible;
 use std::fmt;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
 use actix_service::{IntoService, Service, Transform};
-use futures::future::{ok, Ready};
+use futures::future::{ok, ready, Ready};
 use futures::task::AtomicWaker;
 use futures::channel::oneshot;
-use futures::{Future, Poll};
+use futures::{ready, Future, Poll, FutureExt};
+use std::pin::Pin;
+use std::task::Context;
+
+
+use pin_project::pin_project;
+use std::convert::Infallible;
 
 struct Record<I, E> {
     rx: oneshot::Receiver<Result<I, E>>,
@@ -100,7 +105,9 @@ where
     }
 }
 
+#[pin_project]
 pub struct InOrderService<S: Service> {
+    #[pin]
     service: S,
     task: Rc<AtomicWaker>,
     acks: VecDeque<Record<S::Response, S::Error>>,
@@ -124,7 +131,7 @@ where
         }
     }
 }
-/*
+
 impl<S> Service for InOrderService<S>
 where
     S: Service,
@@ -137,67 +144,67 @@ where
     type Error = InOrderError<S::Error>;
     type Future = InOrderServiceResponse<S>;
 
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let mut this = self.project();
         // poll_ready could be called from different task
-        self.task.register();
+        this.task.register(ctx.waker());
 
         // check acks
-        while !self.acks.is_empty() {
-            let rec = self.acks.front_mut().unwrap();
-            match rec.rx.poll() {
-                Ok(Poll::Ready(res)) => {
-                    let rec = self.acks.pop_front().unwrap();
+        while !this.acks.is_empty() {
+            let rec = this.acks.front_mut().unwrap();
+            match Pin::new(&mut rec.rx).poll(ctx) {
+                Poll::Ready(Ok(res)) => {
+                    let rec = this.acks.pop_front().unwrap();
                     let _ = rec.tx.send(res);
                 }
-                Ok(Poll::Pending) => break,
-                Err(oneshot::Canceled) => return Err(InOrderError::Disconnected),
+                Poll::Pending => break,
+                Poll::Ready(Err(oneshot::Canceled)) => return Poll::Ready(Err(InOrderError::Disconnected)),
             }
         }
 
         // check nested service
-        if let Poll::Pending = self.service.poll_ready().map_err(InOrderError::Service)? {
-            Ok(Poll::Pending)
-        } else {
-            Ok(Poll::Ready(()))
-        }
+        let () = ready!(this.service.poll_ready(ctx).map_err(InOrderError::Service))?;
+        Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, request: S::Request) -> Self::Future {
+    fn call(&mut self, req: Self::Request) -> Self::Future {
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
         self.acks.push_back(Record { rx: rx1, tx: tx2 });
 
         let task = self.task.clone();
-        tokio_executor::current_thread::spawn(self.service.call(request).then(move |res| {
-            task.notify();
+        tokio_executor::current_thread::spawn(self.service.call(req).then(move |res| {
+            task.wake();
             let _ = tx1.send(res);
-            Ok(())
+            ready(())
         }));
 
         InOrderServiceResponse { rx: rx2 }
     }
 }
-*/
+
 
 #[doc(hidden)]
+#[pin_project]
 pub struct InOrderServiceResponse<S: Service> {
+    #[pin]
     rx: oneshot::Receiver<Result<S::Response, S::Error>>,
 }
-/*
-impl<S: Service> Future for InOrderServiceResponse<S> {
-    type Item = S::Response;
-    type Error = InOrderError<S::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.rx.poll() {
-            Ok(Poll::Pending) => Ok(Poll::Pending),
-            Ok(Poll::Ready(Ok(res))) => Ok(Poll::Ready(res)),
-            Ok(Poll::Ready(Err(e))) => Err(e.into()),
-            Err(oneshot::Canceled) => Err(InOrderError::Disconnected),
+impl<S: Service> Future for InOrderServiceResponse<S> {
+
+    type Output = Result<S::Response, InOrderError<S::Error>>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        match ready!(this.rx.poll(cx)) {
+            Ok(Ok(res)) => Poll::Ready(Ok(res)),
+            Ok(Err(e)) => Poll::Ready(Err(e.into())),
+            Err(oneshot::Canceled) => Poll::Ready(Err(InOrderError::Disconnected)),
         }
     }
 }
-*/
+
 #[cfg(test)]
 mod tests {
     use futures::future::{lazy, Future};
