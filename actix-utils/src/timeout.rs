@@ -7,8 +7,8 @@ use std::marker::PhantomData;
 use std::time::Duration;
 
 use actix_service::{IntoService, Service, Transform};
-use futures::future::{ok, FutureResult};
-use futures::{Async, Future, Poll};
+use futures::future::{ok, Ready};
+use futures::{Future, Poll};
 use tokio_timer::{clock, Delay};
 
 /// Applies a timeout to requests.
@@ -89,7 +89,7 @@ where
     type Error = TimeoutError<S::Error>;
     type InitError = E;
     type Transform = TimeoutService<S>;
-    type Future = FutureResult<Self::Transform, Self::InitError>;
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
         ok(TimeoutService {
@@ -120,7 +120,7 @@ where
         }
     }
 }
-
+/*
 impl<S> Service for TimeoutService<S>
 where
     S: Service,
@@ -141,14 +141,14 @@ where
         }
     }
 }
-
+*/
 /// `TimeoutService` response future
 #[derive(Debug)]
 pub struct TimeoutServiceResponse<T: Service> {
     fut: T::Future,
     sleep: Delay,
 }
-
+/*
 impl<T> Future for TimeoutServiceResponse<T>
 where
     T: Service,
@@ -159,20 +159,20 @@ where
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         // First, try polling the future
         match self.fut.poll() {
-            Ok(Async::Ready(v)) => return Ok(Async::Ready(v)),
-            Ok(Async::NotReady) => {}
+            Ok(Poll::Ready(v)) => return Ok(Poll::Ready(v)),
+            Ok(Poll::Pending) => {}
             Err(e) => return Err(TimeoutError::Service(e)),
         }
 
         // Now check the sleep
         match self.sleep.poll() {
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(_)) => Err(TimeoutError::Timeout),
+            Ok(Poll::Pending) => Ok(Poll::Pending),
+            Ok(Poll::Ready(_)) => Err(TimeoutError::Timeout),
             Err(_) => Err(TimeoutError::Timeout),
         }
     }
 }
-
+*/
 #[cfg(test)]
 mod tests {
     use futures::future::lazy;
@@ -193,7 +193,7 @@ mod tests {
         type Future = Box<dyn Future<Item = (), Error = ()>>;
 
         fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-            Ok(Async::Ready(()))
+            Ok(Poll::Ready(()))
         }
 
         fn call(&mut self, _: ()) -> Self::Future {
@@ -235,7 +235,7 @@ mod tests {
         let res = actix_rt::System::new("test").block_on(lazy(|| {
             let timeout = BlankNewService::<(), (), ()>::default()
                 .apply(Timeout::new(resolution), || Ok(SleepService(wait_time)));
-            if let Async::Ready(mut to) = timeout.new_service(&()).poll().unwrap() {
+            if let Poll::Ready(mut to) = timeout.new_service(&()).poll().unwrap() {
                 to.call(())
             } else {
                 panic!()

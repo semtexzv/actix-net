@@ -4,9 +4,9 @@ use std::{fmt, mem};
 
 use actix_codec::{AsyncRead, AsyncWrite, Decoder, Encoder, Framed};
 use actix_service::{IntoService, Service};
-use futures::task::AtomicTask;
-use futures::unsync::mpsc;
-use futures::{Async, Future, Poll, Sink, Stream};
+use futures::task::AtomicWaker;
+use futures::channel::mpsc;
+use futures::{Future, Poll, Sink, Stream};
 use log::debug;
 
 use crate::cell::Cell;
@@ -97,7 +97,7 @@ enum TransportState<S: Service, U: Encoder + Decoder> {
 
 struct FramedTransportInner<I, E> {
     buf: VecDeque<Result<I, E>>,
-    task: AtomicTask,
+    task: AtomicWaker,
 }
 
 impl<S, T, U> FramedTransport<S, T, U>
@@ -113,16 +113,16 @@ where
     fn poll_read(&mut self) -> bool {
         loop {
             match self.service.poll_ready() {
-                Ok(Async::Ready(_)) => {
+                Ok(Poll::Ready(_)) => {
                     let item = match self.framed.poll() {
-                        Ok(Async::Ready(Some(el))) => el,
+                        Ok(Poll::Ready(Some(el))) => el,
                         Err(err) => {
                             self.state =
                                 TransportState::FramedError(FramedTransportError::Decoder(err));
                             return true;
                         }
-                        Ok(Async::NotReady) => return false,
-                        Ok(Async::Ready(None)) => {
+                        Ok(Poll::Pending) => return false,
+                        Ok(Poll::Ready(None)) => {
                             self.state = TransportState::Stopping;
                             return true;
                         }
@@ -130,14 +130,14 @@ where
 
                     let mut cell = self.inner.clone();
                     cell.get_mut().task.register();
-                    tokio_current_thread::spawn(self.service.call(item).then(move |item| {
+                    tokio_executor::current_thread::CurrentThread::spawn(self.service.call(item).then(move |item| {
                         let inner = cell.get_mut();
                         inner.buf.push_back(item);
                         inner.task.notify();
                         Ok(())
                     }));
                 }
-                Ok(Async::NotReady) => return false,
+                Ok(Poll::Pending) => return false,
                 Err(err) => {
                     self.state = TransportState::Error(FramedTransportError::Service(err));
                     return true;
@@ -174,7 +174,7 @@ where
 
                 if !rx_done && self.rx.is_some() {
                     match self.rx.as_mut().unwrap().poll() {
-                        Ok(Async::Ready(Some(FramedMessage::Message(msg)))) => {
+                        Ok(Poll::Ready(Some(FramedMessage::Message(msg)))) => {
                             if let Err(err) = self.framed.force_send(msg) {
                                 self.state = TransportState::FramedError(
                                     FramedTransportError::Encoder(err),
@@ -182,15 +182,15 @@ where
                                 return true;
                             }
                         }
-                        Ok(Async::Ready(Some(FramedMessage::Close))) => {
+                        Ok(Poll::Ready(Some(FramedMessage::Close))) => {
                             self.state = TransportState::FlushAndStop;
                             return true;
                         }
-                        Ok(Async::Ready(None)) => {
+                        Ok(Poll::Ready(None)) => {
                             rx_done = true;
                             let _ = self.rx.take();
                         }
-                        Ok(Async::NotReady) => rx_done = true,
+                        Ok(Poll::Pending) => rx_done = true,
                         Err(_e) => {
                             rx_done = true;
                             let _ = self.rx.take();
@@ -205,14 +205,14 @@ where
 
             if !self.framed.is_write_buf_empty() {
                 match self.framed.poll_complete() {
-                    Ok(Async::NotReady) => break,
+                    Ok(Poll::Pending) => break,
                     Err(err) => {
                         debug!("Error sending data: {:?}", err);
                         self.state =
                             TransportState::FramedError(FramedTransportError::Encoder(err));
                         return true;
                     }
-                    Ok(Async::Ready(_)) => (),
+                    Ok(Poll::Ready(_)) => (),
                 }
             } else {
                 break;
@@ -241,7 +241,7 @@ where
             state: TransportState::Processing,
             inner: Cell::new(FramedTransportInner {
                 buf: VecDeque::new(),
-                task: AtomicTask::new(),
+                task: AtomicWaker::new(),
             }),
         }
     }
@@ -278,7 +278,7 @@ where
         &mut self.framed
     }
 }
-
+/*
 impl<S, T, U> Future for FramedTransport<S, T, U>
 where
     S: Service<Request = Request<U>, Response = Response<U>>,
@@ -298,7 +298,7 @@ where
                 if self.poll_read() || self.poll_write() {
                     self.poll()
                 } else {
-                    Ok(Async::NotReady)
+                    Ok(Poll::Pending)
                 }
             }
             TransportState::Error(err) => {
@@ -308,7 +308,7 @@ where
                     Err(err)
                 } else {
                     self.state = TransportState::Error(err);
-                    Ok(Async::NotReady)
+                    Ok(Poll::Pending)
                 }
             }
             TransportState::FlushAndStop => {
@@ -316,17 +316,18 @@ where
                     match self.framed.poll_complete() {
                         Err(err) => {
                             debug!("Error sending data: {:?}", err);
-                            Ok(Async::Ready(()))
+                            Ok(Poll::Ready(()))
                         }
-                        Ok(Async::NotReady) => Ok(Async::NotReady),
-                        Ok(Async::Ready(_)) => Ok(Async::Ready(())),
+                        Ok(Poll::Pending) => Ok(Poll::Pending),
+                        Ok(Poll::Ready(_)) => Ok(Poll::Ready(())),
                     }
                 } else {
-                    Ok(Async::Ready(()))
+                    Ok(Poll::Ready(()))
                 }
             }
             TransportState::FramedError(err) => Err(err),
-            TransportState::Stopping => Ok(Async::Ready(())),
+            TransportState::Stopping => Ok(Poll::Ready(())),
         }
     }
 }
+*/
