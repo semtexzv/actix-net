@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
 use actix_service::{NewService, Service};
-use futures::future::{ok, FutureResult};
-use futures::{Async, Future, Poll};
+use futures::future::{ok, Ready};
+use futures::{Future, Poll};
 use tokio_timer::Delay;
 
 use super::time::{LowResTime, LowResTimeService};
@@ -54,7 +54,7 @@ where
     type InitError = Infallible;
     type Config = ();
     type Service = KeepAliveService<R, E, F>;
-    type Future = FutureResult<Self::Service, Self::InitError>;
+    type Future = Ready<Result<Self::Service, Self::InitError>>;
 
     fn new_service(&self, _: &()) -> Self::Future {
         ok(KeepAliveService::new(
@@ -90,7 +90,7 @@ where
         }
     }
 }
-
+/*
 impl<R, E, F> Service for KeepAliveService<R, E, F>
 where
     F: Fn() -> E,
@@ -98,21 +98,21 @@ where
     type Request = R;
     type Response = R;
     type Error = E;
-    type Future = FutureResult<R, E>;
+    type Future = Ready<Result<R, E>>;
 
     fn poll_ready(&mut self) -> Poll<(), Self::Error> {
         match self.delay.poll() {
-            Ok(Async::Ready(_)) => {
+            Ok(Poll::Ready(_)) => {
                 let now = self.time.now();
                 if self.expire <= now {
                     Err((self.f)())
                 } else {
                     self.delay.reset(self.expire);
                     let _ = self.delay.poll();
-                    Ok(Async::Ready(()))
+                    Ok(Poll::Ready(()))
                 }
             }
-            Ok(Async::NotReady) => Ok(Async::Ready(())),
+            Ok(Poll::Pending) => Ok(Poll::Ready(())),
             Err(_e) => panic!(),
         }
     }
@@ -122,3 +122,4 @@ where
         ok(req)
     }
 }
+*/

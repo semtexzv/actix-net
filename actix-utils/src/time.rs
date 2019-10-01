@@ -2,8 +2,8 @@ use std::convert::Infallible;
 use std::time::{self, Duration, Instant};
 
 use actix_service::{NewService, Service};
-use futures::future::{ok, FutureResult};
-use futures::{Async, Future, Poll};
+use futures::future::{ok, Ready};
+use futures::{Future, Poll};
 use tokio_timer::sleep;
 
 use super::cell::Cell;
@@ -49,7 +49,7 @@ impl NewService for LowResTime {
     type InitError = Infallible;
     type Config = ();
     type Service = LowResTimeService;
-    type Future = FutureResult<Self::Service, Self::InitError>;
+    type Future = Ready<Result<Self::Service, Self::InitError>>;
 
     fn new_service(&self, _: &()) -> Self::Future {
         ok(self.timer())
@@ -79,7 +79,7 @@ impl LowResTimeService {
                 b.resolution
             };
 
-            tokio_current_thread::spawn(sleep(interval).map_err(|_| panic!()).and_then(
+            tokio_executor::current_thread::spawn(sleep(interval).map_err(|_| panic!()).and_then(
                 move |_| {
                     inner.get_mut().current.take();
                     Ok(())
@@ -89,22 +89,22 @@ impl LowResTimeService {
         }
     }
 }
-
+/*
 impl Service for LowResTimeService {
     type Request = ();
     type Response = Instant;
     type Error = Infallible;
-    type Future = FutureResult<Self::Response, Self::Error>;
+    type Future = Ready<Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        Ok(Async::Ready(()))
+        Ok(Poll::Ready(()))
     }
 
     fn call(&mut self, _: ()) -> Self::Future {
         ok(self.now())
     }
 }
-
+*/
 #[derive(Clone, Debug)]
 pub struct SystemTime(Cell<SystemTimeInner>);
 
@@ -146,7 +146,7 @@ impl SystemTimeService {
                 b.resolution
             };
 
-            tokio_current_thread::spawn(sleep(interval).map_err(|_| panic!()).and_then(
+            tokio_executor::current_thread::spawn(sleep(interval).map_err(|_| panic!()).and_then(
                 move |_| {
                     inner.get_mut().current.take();
                     Ok(())
