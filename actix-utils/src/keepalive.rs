@@ -5,9 +5,13 @@ use std::time::{Duration, Instant};
 use actix_service::{NewService, Service};
 use futures::future::{ok, Ready};
 use futures::{Future, Poll};
-use tokio_timer::Delay;
+use tokio_timer::{delay, Delay};
 
 use super::time::{LowResTime, LowResTimeService};
+
+use pin_project::pin_project;
+use std::pin::Pin;
+use std::task::Context;
 
 pub struct KeepAlive<R, E, F> {
     f: F,
@@ -65,10 +69,12 @@ where
     }
 }
 
+#[pin_project]
 pub struct KeepAliveService<R, E, F> {
     f: F,
     ka: Duration,
     time: LowResTimeService,
+    #[pin]
     delay: Delay,
     expire: Instant,
     _t: PhantomData<(R, E)>,
@@ -85,12 +91,12 @@ where
             ka,
             time,
             expire,
-            delay: Delay::new(expire),
+            delay: delay(expire),
             _t: PhantomData,
         }
     }
 }
-/*
+
 impl<R, E, F> Service for KeepAliveService<R, E, F>
 where
     F: Fn() -> E,
@@ -100,20 +106,20 @@ where
     type Error = E;
     type Future = Ready<Result<R, E>>;
 
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        match self.delay.poll() {
-            Ok(Poll::Ready(_)) => {
-                let now = self.time.now();
-                if self.expire <= now {
-                    Err((self.f)())
+    fn poll_ready(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        let mut this = self.project();
+        match this.delay.as_mut().poll(ctx) {
+            Poll::Ready(_) => {
+                let now = this.time.now();
+                if *this.expire <= now {
+                    Poll::Ready(Err((this.f)()))
                 } else {
-                    self.delay.reset(self.expire);
-                    let _ = self.delay.poll();
-                    Ok(Poll::Ready(()))
+                    this.delay.reset(*this.expire);
+                    let _ = this.delay.poll(ctx);
+                    Poll::Ready(Ok(()))
                 }
             }
-            Ok(Poll::Pending) => Ok(Poll::Ready(())),
-            Err(_e) => panic!(),
+            Poll::Pending => Poll::Ready(Ok(())),
         }
     }
 
@@ -122,4 +128,3 @@ where
         ok(req)
     }
 }
-*/
