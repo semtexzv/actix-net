@@ -1,5 +1,6 @@
 # Changes
 
+<<<<<<< HEAD
 ## [0.7.0] - 2019-10-04
 
 ### Changed
@@ -14,6 +15,8 @@
 * Add UDS listening support to `ServerBuilder`
 
 
+=======
+>>>>>>> Migrate actix-server to std::future
 ## [0.6.0] - 2019-07-18
 
 ### Added
