@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use futures::task::AtomicTask;
+use futures::task::AtomicWaker;
 
 #[derive(Clone)]
 /// Simple counter with ability to notify task on reaching specific number
@@ -12,7 +12,7 @@ pub struct Counter(Rc<CounterInner>);
 struct CounterInner {
     count: Cell<usize>,
     capacity: usize,
-    task: AtomicTask,
+    task: AtomicWaker,
 }
 
 impl Counter {
@@ -21,7 +21,7 @@ impl Counter {
         Counter(Rc::new(CounterInner {
             capacity,
             count: Cell::new(0),
-            task: AtomicTask::new(),
+            task: AtomicWaker::new(),
         }))
     }
 

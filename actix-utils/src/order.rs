@@ -5,10 +5,10 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use actix_service::{IntoService, Service, Transform};
-use futures::future::{ok, FutureResult};
-use futures::task::AtomicTask;
-use futures::unsync::oneshot;
-use futures::{Async, Future, Poll};
+use futures::future::{ok, Ready};
+use futures::task::AtomicWaker;
+use futures::channel::oneshot;
+use futures::{Future, Poll};
 
 struct Record<I, E> {
     rx: oneshot::Receiver<Result<I, E>>,
@@ -93,7 +93,7 @@ where
     type Error = InOrderError<S::Error>;
     type InitError = Infallible;
     type Transform = InOrderService<S>;
-    type Future = FutureResult<Self::Transform, Self::InitError>;
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
         ok(InOrderService::new(service))
@@ -102,7 +102,7 @@ where
 
 pub struct InOrderService<S: Service> {
     service: S,
-    task: Rc<AtomicTask>,
+    task: Rc<AtomicWaker>,
     acks: VecDeque<Record<S::Response, S::Error>>,
 }
 
@@ -120,11 +120,11 @@ where
         Self {
             service: service.into_service(),
             acks: VecDeque::new(),
-            task: Rc::new(AtomicTask::new()),
+            task: Rc::new(AtomicWaker::new()),
         }
     }
 }
-
+/*
 impl<S> Service for InOrderService<S>
 where
     S: Service,
@@ -145,20 +145,20 @@ where
         while !self.acks.is_empty() {
             let rec = self.acks.front_mut().unwrap();
             match rec.rx.poll() {
-                Ok(Async::Ready(res)) => {
+                Ok(Poll::Ready(res)) => {
                     let rec = self.acks.pop_front().unwrap();
                     let _ = rec.tx.send(res);
                 }
-                Ok(Async::NotReady) => break,
+                Ok(Poll::Pending) => break,
                 Err(oneshot::Canceled) => return Err(InOrderError::Disconnected),
             }
         }
 
         // check nested service
-        if let Async::NotReady = self.service.poll_ready().map_err(InOrderError::Service)? {
-            Ok(Async::NotReady)
+        if let Poll::Pending = self.service.poll_ready().map_err(InOrderError::Service)? {
+            Ok(Poll::Pending)
         } else {
-            Ok(Async::Ready(()))
+            Ok(Poll::Ready(()))
         }
     }
 
@@ -168,7 +168,7 @@ where
         self.acks.push_back(Record { rx: rx1, tx: tx2 });
 
         let task = self.task.clone();
-        tokio_current_thread::spawn(self.service.call(request).then(move |res| {
+        tokio_executor::current_thread::spawn(self.service.call(request).then(move |res| {
             task.notify();
             let _ = tx1.send(res);
             Ok(())
@@ -177,26 +177,27 @@ where
         InOrderServiceResponse { rx: rx2 }
     }
 }
+*/
 
 #[doc(hidden)]
 pub struct InOrderServiceResponse<S: Service> {
     rx: oneshot::Receiver<Result<S::Response, S::Error>>,
 }
-
+/*
 impl<S: Service> Future for InOrderServiceResponse<S> {
     type Item = S::Response;
     type Error = InOrderError<S::Error>;
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         match self.rx.poll() {
-            Ok(Async::NotReady) => Ok(Async::NotReady),
-            Ok(Async::Ready(Ok(res))) => Ok(Async::Ready(res)),
-            Ok(Async::Ready(Err(e))) => Err(e.into()),
+            Ok(Poll::Pending) => Ok(Poll::Pending),
+            Ok(Poll::Ready(Ok(res))) => Ok(Poll::Ready(res)),
+            Ok(Poll::Ready(Err(e))) => Err(e.into()),
             Err(oneshot::Canceled) => Err(InOrderError::Disconnected),
         }
     }
 }
-
+*/
 #[cfg(test)]
 mod tests {
     use futures::future::{lazy, Future};
@@ -217,7 +218,7 @@ mod tests {
         type Future = Box<dyn Future<Item = usize, Error = ()>>;
 
         fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-            Ok(Async::Ready(()))
+            Ok(Poll::Ready(()))
         }
 
         fn call(&mut self, req: oneshot::Receiver<usize>) -> Self::Future {
@@ -235,7 +236,7 @@ mod tests {
 
         fn poll(&mut self) -> Poll<(), ()> {
             let _ = self.s.poll_ready();
-            Ok(Async::NotReady)
+            Ok(Poll::Pending)
         }
     }
 

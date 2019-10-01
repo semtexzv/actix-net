@@ -1,6 +1,6 @@
 //! Contains `Either` service and related types and functions.
 use actix_service::{IntoNewService, NewService, Service};
-use futures::{future, try_ready, Async, Future, IntoFuture, Poll};
+use futures::{future, ready, Future, Poll};
 
 /// Combine two different service types into a single type.
 ///
@@ -20,7 +20,7 @@ impl<A: Clone, B: Clone> Clone for EitherService<A, B> {
         }
     }
 }
-
+/*
 impl<A, B> Service for EitherService<A, B>
 where
     A: Service,
@@ -36,9 +36,9 @@ where
         let right = self.right.poll_ready()?;
 
         if left.is_ready() && right.is_ready() {
-            Ok(Async::Ready(()))
+            Ok(Poll::Ready(()))
         } else {
-            Ok(Async::NotReady)
+            Ok(Poll::Pending)
         }
     }
 
@@ -49,7 +49,7 @@ where
         }
     }
 }
-
+*/
 /// Combine two different new service types into a single service.
 pub struct Either<A, B> {
     left: A,
@@ -117,8 +117,8 @@ impl<A: Clone, B: Clone> Clone for Either<A, B> {
 pub struct EitherNewService<A: NewService, B: NewService> {
     left: Option<A::Service>,
     right: Option<B::Service>,
-    left_fut: <A::Future as IntoFuture>::Future,
-    right_fut: <B::Future as IntoFuture>::Future,
+    left_fut: A::Future,
+    right_fut: B::Future,
 }
 
 impl<A, B> Future for EitherNewService<A, B>
@@ -126,24 +126,24 @@ where
     A: NewService,
     B: NewService<Response = A::Response, Error = A::Error, InitError = A::InitError>,
 {
-    type Item = EitherService<A::Service, B::Service>;
-    type Error = A::InitError;
-
+    type Output = Result<EitherService<A::Service, B::Service>,A::InitError>;
+    /*
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         if self.left.is_none() {
-            self.left = Some(try_ready!(self.left_fut.poll()));
+            self.left = Some(ready!(self.left_fut.poll()));
         }
         if self.right.is_none() {
-            self.right = Some(try_ready!(self.right_fut.poll()));
+            self.right = Some(ready!(self.right_fut.poll()));
         }
 
         if self.left.is_some() && self.right.is_some() {
-            Ok(Async::Ready(EitherService {
+            Ok(Poll::Ready(EitherService {
                 left: self.left.take().unwrap(),
                 right: self.right.take().unwrap(),
             }))
         } else {
-            Ok(Async::NotReady)
+            Ok(Poll::Pending)
         }
     }
+    */
 }

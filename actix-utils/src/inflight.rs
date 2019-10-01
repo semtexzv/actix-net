@@ -1,8 +1,8 @@
 use std::convert::Infallible;
 
 use actix_service::{IntoService, Service, Transform};
-use futures::future::{ok, FutureResult};
-use futures::{Async, Future, Poll};
+use futures::future::{ok, Ready};
+use futures::{Future, Poll};
 
 use super::counter::{Counter, CounterGuard};
 
@@ -32,7 +32,7 @@ impl<S: Service> Transform<S> for InFlight {
     type Error = S::Error;
     type InitError = Infallible;
     type Transform = InFlightService<S>;
-    type Future = FutureResult<Self::Transform, Self::InitError>;
+    type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
         ok(InFlightService::new(self.max_inflight, service))
@@ -58,7 +58,7 @@ where
         }
     }
 }
-
+/*
 impl<T> Service for InFlightService<T>
 where
     T: Service,
@@ -69,13 +69,13 @@ where
     type Future = InFlightServiceResponse<T>;
 
     fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        if let Async::NotReady = self.service.poll_ready()? {
-            Ok(Async::NotReady)
+        if let Poll::Pending = self.service.poll_ready()? {
+            Ok(Poll::Pending)
         } else if !self.count.available() {
             log::trace!("InFlight limit exceeded");
-            Ok(Async::NotReady)
+            Ok(Poll::Pending)
         } else {
-            Ok(Async::Ready(()))
+            Ok(Poll::Ready(()))
         }
     }
 
@@ -86,13 +86,13 @@ where
         }
     }
 }
-
+*/
 #[doc(hidden)]
 pub struct InFlightServiceResponse<T: Service> {
     fut: T::Future,
     _guard: CounterGuard,
 }
-
+/*
 impl<T: Service> Future for InFlightServiceResponse<T> {
     type Item = T::Response;
     type Error = T::Error;
@@ -101,11 +101,12 @@ impl<T: Service> Future for InFlightServiceResponse<T> {
         self.fut.poll()
     }
 }
+*/
 
 #[cfg(test)]
 mod tests {
     use futures::future::lazy;
-    use futures::{Async, Poll};
+    use futures::{Poll};
 
     use std::time::Duration;
 
@@ -122,7 +123,7 @@ mod tests {
         type Future = Box<dyn Future<Item = (), Error = ()>>;
 
         fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-            Ok(Async::Ready(()))
+            Ok(Poll::Ready(()))
         }
 
         fn call(&mut self, _: ()) -> Self::Future {
@@ -136,14 +137,14 @@ mod tests {
         let _ = actix_rt::System::new("test").block_on(lazy(|| {
             let mut srv =
                 Blank::new().and_then(InFlightService::new(1, SleepService(wait_time)));
-            assert_eq!(srv.poll_ready(), Ok(Async::Ready(())));
+            assert_eq!(srv.poll_ready(), Ok(Poll::Ready(())));
 
             let mut res = srv.call(());
             let _ = res.poll();
-            assert_eq!(srv.poll_ready(), Ok(Async::NotReady));
+            assert_eq!(srv.poll_ready(), Ok(Poll::Pending));
 
             drop(res);
-            assert_eq!(srv.poll_ready(), Ok(Async::Ready(())));
+            assert_eq!(srv.poll_ready(), Ok(Poll::Ready(())));
 
             Ok::<_, ()>(())
         }));
@@ -156,15 +157,15 @@ mod tests {
             let srv =
                 BlankNewService::new().apply(InFlight::new(1), || Ok(SleepService(wait_time)));
 
-            if let Async::Ready(mut srv) = srv.new_service(&()).poll().unwrap() {
-                assert_eq!(srv.poll_ready(), Ok(Async::Ready(())));
+            if let Poll::Ready(mut srv) = srv.new_service(&()).poll().unwrap() {
+                assert_eq!(srv.poll_ready(), Ok(Poll::Ready(())));
 
                 let mut res = srv.call(());
                 let _ = res.poll();
-                assert_eq!(srv.poll_ready(), Ok(Async::NotReady));
+                assert_eq!(srv.poll_ready(), Ok(Poll::Pending));
 
                 drop(res);
-                assert_eq!(srv.poll_ready(), Ok(Async::Ready(())));
+                assert_eq!(srv.poll_ready(), Ok(Poll::Ready(())));
             } else {
                 panic!()
             }
