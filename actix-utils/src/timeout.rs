@@ -8,8 +8,12 @@ use std::time::Duration;
 
 use actix_service::{IntoService, Service, Transform};
 use futures::future::{ok, Ready};
-use futures::{Future, Poll};
-use tokio_timer::{clock, Delay};
+use futures::{ready, Future, Poll};
+use tokio_timer::{clock, delay, Delay};
+use std::pin::Pin;
+use std::task::Context;
+
+use pin_project::pin_project;
 
 /// Applies a timeout to requests.
 #[derive(Debug)]
@@ -100,19 +104,21 @@ where
 }
 
 /// Applies a timeout to requests.
+#[pin_project]
 #[derive(Debug, Clone)]
 pub struct TimeoutService<S> {
+    #[pin]
     service: S,
     timeout: Duration,
 }
 
 impl<S> TimeoutService<S>
-where
-    S: Service,
+    where
+        S: Service,
 {
     pub fn new<U>(timeout: Duration, service: U) -> Self
-    where
-        U: IntoService<S>,
+        where
+            U: IntoService<S>,
     {
         TimeoutService {
             timeout,
@@ -120,59 +126,59 @@ where
         }
     }
 }
-/*
+
 impl<S> Service for TimeoutService<S>
-where
-    S: Service,
+    where
+        S: Service,
 {
     type Request = S::Request;
     type Response = S::Response;
     type Error = TimeoutError<S::Error>;
     type Future = TimeoutServiceResponse<S>;
 
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        self.service.poll_ready().map_err(TimeoutError::Service)
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project().service.poll_ready(ctx).map_err(TimeoutError::Service)
     }
 
     fn call(&mut self, request: S::Request) -> Self::Future {
         TimeoutServiceResponse {
             fut: self.service.call(request),
-            sleep: Delay::new(clock::now() + self.timeout),
+            sleep: delay(clock::now() + self.timeout),
         }
     }
 }
-*/
+
 /// `TimeoutService` response future
+#[pin_project]
 #[derive(Debug)]
 pub struct TimeoutServiceResponse<T: Service> {
+    #[pin]
     fut: T::Future,
+    #[pin]
     sleep: Delay,
 }
-/*
-impl<T> Future for TimeoutServiceResponse<T>
-where
-    T: Service,
-{
-    type Item = T::Response;
-    type Error = TimeoutError<T::Error>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+impl<T> Future for TimeoutServiceResponse<T>
+    where
+        T: Service,
+{
+    type Output = Result<T::Response, TimeoutError<T::Error>>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
         // First, try polling the future
-        match self.fut.poll() {
-            Ok(Poll::Ready(v)) => return Ok(Poll::Ready(v)),
-            Ok(Poll::Pending) => {}
-            Err(e) => return Err(TimeoutError::Service(e)),
+        match this.fut.poll(cx) {
+            Poll::Ready(Ok(v)) => return Poll::Ready(Ok(v)),
+            Poll::Ready(Err(e)) => return Poll::Ready(Err(TimeoutError::Service(e))),
+            Poll::Pending => {}
         }
 
         // Now check the sleep
-        match self.sleep.poll() {
-            Ok(Poll::Pending) => Ok(Poll::Pending),
-            Ok(Poll::Ready(_)) => Err(TimeoutError::Timeout),
-            Err(_) => Err(TimeoutError::Timeout),
-        }
+        let () = ready!(this.sleep.poll(cx));
+        Poll::Ready(Err(TimeoutError::Timeout))
     }
 }
-*/
+
 #[cfg(test)]
 mod tests {
     use futures::future::lazy;
@@ -190,7 +196,7 @@ mod tests {
         type Request = ();
         type Response = ();
         type Error = ();
-        type Future = Box<dyn Future<Item = (), Error = ()>>;
+        type Future = Box<dyn Future<Item=(), Error=()>>;
 
         fn poll_ready(&mut self) -> Poll<(), Self::Error> {
             Ok(Poll::Ready(()))

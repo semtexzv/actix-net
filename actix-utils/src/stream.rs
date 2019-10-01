@@ -3,7 +3,12 @@ use std::rc::Rc;
 
 use actix_service::{IntoService, NewService, Service};
 use futures::channel::mpsc;
-use futures::{Future, Poll, Stream, TryFutureExt, TryFuture};
+use futures::{ready, Future, Poll, Stream, TryFutureExt, TryFuture, FutureExt};
+use std::pin::Pin;
+use std::task::Context;
+
+use pin_project::pin_project;
+use futures::future::LocalBoxFuture;
 
 type Request<T> = Result<<T as IntoStream>::Item, <T as IntoStream>::Error>;
 
@@ -33,7 +38,7 @@ pub struct StreamService<S, T: NewService, E> {
     config: T::Config,
     _t: PhantomData<(S, E)>,
 }
-/*
+
 impl<S, T, E> Service for StreamService<S, T, E>
     where
         S: IntoStream + 'static,
@@ -45,42 +50,45 @@ impl<S, T, E> Service for StreamService<S, T, E>
     type Request = S;
     type Response = ();
     type Error = E;
-    type Future = Box<dyn Future<Output=Result<(), E>>>;
+    type Future = LocalBoxFuture<'static, Result<(), E>>;
 
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        Ok(Poll::Ready(()))
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, req: S) -> Self::Future {
-        Box::new(
-            self.factory
-                .new_service(&self.config)
-                .and_then(move |srv| StreamDispatcher::new(req, srv)),
-        )
+        self.factory
+            .new_service(&self.config)
+            .and_then(move |srv| StreamDispatcher::new(req, srv))
+            .boxed_local()
     }
 }
-*/
+
+#[pin_project]
 pub struct StreamDispatcher<S, T>
     where
         S: IntoStream + 'static,
         T: Service<Request=Request<S>, Response=()> + 'static,
-        T::Future: 'static,
+        T: 'static,
 {
-    stream: S,
+    #[pin]
+    stream: S::Stream,
+    #[pin]
     service: T,
+    #[pin]
     err_rx: mpsc::UnboundedReceiver<T::Error>,
+    #[pin]
     err_tx: mpsc::UnboundedSender<T::Error>,
 }
-/*
+
 impl<S, T> StreamDispatcher<S, T>
     where
-        S: Stream,
+        S: IntoStream,
         T: Service<Request=Request<S>, Response=()>,
         T::Future: 'static,
 {
-    pub fn new<F1, F2>(stream: F1, service: F2) -> Self
+    pub fn new<F2>(stream: S, service: F2) -> Self
         where
-            F1: IntoStream<Stream=S, Item=S::Item, Error=S::Error>,
             F2: IntoService<T>,
     {
         let (err_tx, err_rx) = mpsc::unbounded();
@@ -92,62 +100,75 @@ impl<S, T> StreamDispatcher<S, T>
         }
     }
 }
-*/
-/*
-impl<S, T> Future for StreamDispatcher<S, T>
-where
-    S: Stream,
-    T: Service<Request = Request<S>, Response = ()>,
-    T::Future: 'static,
-{
-    type Item = ();
-    type Error = T::Error;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Ok(Poll::Ready(Some(e))) = self.err_rx.poll() {
-            return Err(e);
+
+impl<S, T> Future for StreamDispatcher<S, T>
+    where
+        S: IntoStream + 'static,
+        T: Service<Request=Request<S>, Response=()> + 'static,
+{
+    type Output = Result<(), T::Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.as_mut().project();
+        if let Poll::Ready(Some(e)) = this.err_rx.poll_next(cx) {
+            return Poll::Ready(Err(e));
         }
 
         loop {
-            match self.service.poll_ready()? {
-                Poll::Ready(_) => match self.stream.poll() {
-                    Ok(Poll::Ready(Some(item))) => {
-                        tokio_current_thread::spawn(StreamDispatcherService {
-                            fut: self.service.call(Ok(item)),
-                            stop: self.err_tx.clone(),
+            let mut this = self.as_mut().project();
+            match this.service.as_mut().poll_ready(cx)? {
+                Poll::Ready(_) => match this.stream.poll_next(cx) {
+                    Poll::Ready(Some(Ok(item))) => {
+                        let mut svc = unsafe { Pin::get_unchecked_mut(this.service) };
+                        tokio_executor::current_thread::spawn(StreamDispatcherService {
+                            fut: svc.call(Ok(item)),
+                            stop: this.err_tx.clone(),
+                        });
+                    }
+                    Poll::Ready(Some(Err(err))) => {
+                        let mut svc = unsafe { Pin::get_unchecked_mut(this.service) };
+                        tokio_executor::current_thread::spawn(StreamDispatcherService {
+                            fut: svc.call(Err(err)),
+                            stop: this.err_tx.clone(),
                         })
                     }
-                    Err(err) => tokio_current_thread::spawn(StreamDispatcherService {
-                        fut: self.service.call(Err(err)),
-                        stop: self.err_tx.clone(),
-                    }),
-                    Ok(Poll::Pending) => return Ok(Poll::Pending),
-                    Ok(Poll::Ready(None)) => return Ok(Poll::Ready(())),
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(None) => return Poll::Ready(Ok(())),
                 },
-                Poll::Pending => return Ok(Poll::Pending),
+                Poll::Pending => return Poll::Pending,
             }
         }
     }
+
+
+
+    /*
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+
+    }
+    */
 }
-*/
+
+#[pin_project]
 struct StreamDispatcherService<F: TryFuture> {
+    #[pin]
     fut: F,
     stop: mpsc::UnboundedSender<F::Error>,
 }
-/*
-impl<F: Future> Future for StreamDispatcherService<F> {
-    type Item = ();
-    type Error = ();
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self.fut.poll() {
-            Ok(Poll::Ready(_)) => Ok(Poll::Ready(())),
-            Ok(Poll::Pending) => Ok(Poll::Pending),
+
+impl<F: TryFuture> Future for StreamDispatcherService<F> {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        match ready!(this.fut.try_poll(cx)) {
+            Ok(_) => Poll::Ready(()),
             Err(e) => {
-                let _ = self.stop.unbounded_send(e);
-                Ok(Poll::Ready(()))
+                let _ = this.stop.unbounded_send(e);
+                Poll::Ready(())
             }
         }
     }
 }
-*/
