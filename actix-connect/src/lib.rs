@@ -6,6 +6,7 @@
 //! * `rust-tls` - enables ssl support via `rustls` crate
 
 #![recursion_limit = "128"]
+#![feature(type_alias_impl_trait)]
 
 #[macro_use]
 extern crate log;
@@ -32,11 +33,11 @@ pub use self::service::{ConnectService, ConnectServiceFactory, TcpConnectService
 
 use actix_rt::Arbiter;
 use actix_service::{NewService, Service, ServiceExt};
-use tokio_tcp::TcpStream;
+use tokio_net::tcp::TcpStream;
 
 pub fn start_resolver(cfg: ResolverConfig, opts: ResolverOpts) -> AsyncResolver {
     let (resolver, bg) = AsyncResolver::new(cfg, opts);
-    tokio_current_thread::spawn(bg);
+    //TODO tokio_executor::current_thread::spawn(bg);
     resolver
 }
 
@@ -55,7 +56,7 @@ pub(crate) fn get_default_resolver() -> AsyncResolver {
         };
 
         let (resolver, bg) = AsyncResolver::new(cfg, opts);
-        tokio_current_thread::spawn(bg);
+        //TODO tokio_executor::current_thread::spawn(bg);
 
         Arbiter::set_item(DefaultResolver(resolver.clone()));
         resolver
