@@ -1,7 +1,7 @@
 use std::fmt;
 
-use futures::unsync::{mpsc, oneshot};
-use futures::Future;
+use futures::channel::{mpsc, oneshot};
+use futures::{Future, TryFutureExt};
 
 use crate::dispatcher::FramedMessage;
 
@@ -24,7 +24,7 @@ impl<T> Sink<T> {
     }
 
     /// Close connection
-    pub fn wait_close(&self) -> impl Future<Item = (), Error = ()> {
+    pub fn wait_close(&self) -> impl Future<Output = Result<(),()>> {
         let (tx, rx) = oneshot::channel();
         let _ = self.0.unbounded_send(FramedMessage::WaitClose(tx));
 

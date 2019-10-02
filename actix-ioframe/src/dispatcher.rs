@@ -5,9 +5,9 @@ use std::rc::Rc;
 
 use actix_codec::{AsyncRead, AsyncWrite, Decoder, Encoder, Framed};
 use actix_service::{IntoService, Service};
-use futures::task::AtomicTask;
-use futures::unsync::{mpsc, oneshot};
-use futures::{Async, Future, Poll, Sink as FutureSink, Stream};
+use futures::task::AtomicWaker;
+use futures::channel::{mpsc, oneshot};
+use futures::{ Future, Poll, Sink as FutureSink, Stream};
 use log::debug;
 
 use crate::cell::Cell;
@@ -75,7 +75,7 @@ where
             dispatch_state: FramedState::Processing,
             inner: Cell::new(FramedDispatcherInner {
                 buf: VecDeque::new(),
-                task: AtomicTask::new(),
+                task: AtomicWaker::new(),
             }),
         }
     }
@@ -115,9 +115,10 @@ impl<S: Service, U: Encoder + Decoder> FramedState<S, U> {
 
 struct FramedDispatcherInner<I, E> {
     buf: VecDeque<Result<I, E>>,
-    task: AtomicTask,
+    task: AtomicWaker,
 }
 
+/*
 impl<St, S, T, U> FramedDispatcher<St, S, T, U>
 where
     S: Service<Request = Request<St, U>, Response = Option<Response<U>>>,
@@ -259,7 +260,6 @@ where
         false
     }
 }
-
 impl<St, S, T, U> Future for FramedDispatcher<St, S, T, U>
 where
     S: Service<Request = Request<St, U>, Response = Option<Response<U>>>,
@@ -323,3 +323,5 @@ where
         }
     }
 }
+
+*/
