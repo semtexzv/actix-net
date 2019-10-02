@@ -85,8 +85,8 @@ impl<E> Clone for Timeout<E> {
 }
 
 impl<S, E> Transform<S> for Timeout<E>
-where
-    S: Service,
+    where
+        S: Service,
 {
     type Request = S::Request;
     type Response = S::Response;
@@ -181,8 +181,8 @@ impl<T> Future for TimeoutServiceResponse<T>
 
 #[cfg(test)]
 mod tests {
-    use futures::future::lazy;
-    use futures::{Async, Poll};
+    use futures::future::{lazy, LocalBoxFuture};
+    use futures::{Poll, FutureExt};
 
     use std::time::Duration;
 
@@ -196,14 +196,15 @@ mod tests {
         type Request = ();
         type Response = ();
         type Error = ();
-        type Future = Box<dyn Future<Item=(), Error=()>>;
+        type Future = LocalBoxFuture<'static, Result<(), ()>>;
 
-        fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-            Ok(Poll::Ready(()))
+        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
         }
 
+
         fn call(&mut self, _: ()) -> Self::Future {
-            Box::new(tokio_timer::sleep(self.0).map_err(|_| ()))
+            tokio_timer::sleep(self.0).map(Ok).boxed_local()
         }
     }
 
@@ -212,11 +213,11 @@ mod tests {
         let resolution = Duration::from_millis(100);
         let wait_time = Duration::from_millis(50);
 
-        let res = actix_rt::System::new("test").block_on(lazy(|| {
+        let res = actix_rt::System::new("test").block_on(async {
             let mut timeout = Blank::default()
                 .and_then(TimeoutService::new(resolution, SleepService(wait_time)));
-            timeout.call(())
-        }));
+            timeout.call(()).await
+        });
         assert_eq!(res, Ok(()));
     }
 
@@ -225,11 +226,11 @@ mod tests {
         let resolution = Duration::from_millis(100);
         let wait_time = Duration::from_millis(150);
 
-        let res = actix_rt::System::new("test").block_on(lazy(|| {
+        let res = actix_rt::System::new("test").block_on(async {
             let mut timeout = Blank::default()
                 .and_then(TimeoutService::new(resolution, SleepService(wait_time)));
-            timeout.call(())
-        }));
+            timeout.call(()).await
+        });
         assert_eq!(res, Err(TimeoutError::Timeout));
     }
 
@@ -238,15 +239,12 @@ mod tests {
         let resolution = Duration::from_millis(100);
         let wait_time = Duration::from_millis(150);
 
-        let res = actix_rt::System::new("test").block_on(lazy(|| {
+        let res = actix_rt::System::new("test").block_on(async {
             let timeout = BlankNewService::<(), (), ()>::default()
-                .apply(Timeout::new(resolution), || Ok(SleepService(wait_time)));
-            if let Poll::Ready(mut to) = timeout.new_service(&()).poll().unwrap() {
-                to.call(())
-            } else {
-                panic!()
-            }
-        }));
+                .apply(Timeout::new(resolution), || ok(SleepService(wait_time)));
+            let mut to = timeout.new_service(&()).await.unwrap();
+            to.call(()).await
+        });
         assert_eq!(res, Err(TimeoutError::Timeout));
     }
 }
