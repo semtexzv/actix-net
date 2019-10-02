@@ -59,11 +59,11 @@ pub struct InOrder<S> {
 }
 
 impl<S> InOrder<S>
-where
-    S: Service,
-    S::Response: 'static,
-    S::Future: 'static,
-    S::Error: 'static,
+    where
+        S: Service,
+        S::Response: 'static,
+        S::Future: 'static,
+        S::Error: 'static,
 {
     pub fn new() -> Self {
         Self { _t: PhantomData }
@@ -75,11 +75,11 @@ where
 }
 
 impl<S> Default for InOrder<S>
-where
-    S: Service,
-    S::Response: 'static,
-    S::Future: 'static,
-    S::Error: 'static,
+    where
+        S: Service,
+        S::Response: 'static,
+        S::Future: 'static,
+        S::Error: 'static,
 {
     fn default() -> Self {
         Self::new()
@@ -87,11 +87,11 @@ where
 }
 
 impl<S> Transform<S> for InOrder<S>
-where
-    S: Service,
-    S::Response: 'static,
-    S::Future: 'static,
-    S::Error: 'static,
+    where
+        S: Service,
+        S::Response: 'static,
+        S::Future: 'static,
+        S::Error: 'static,
 {
     type Request = S::Request;
     type Response = S::Response;
@@ -114,15 +114,15 @@ pub struct InOrderService<S: Service> {
 }
 
 impl<S> InOrderService<S>
-where
-    S: Service,
-    S::Response: 'static,
-    S::Future: 'static,
-    S::Error: 'static,
+    where
+        S: Service,
+        S::Response: 'static,
+        S::Future: 'static,
+        S::Error: 'static,
 {
     pub fn new<U>(service: U) -> Self
-    where
-        U: IntoService<S>,
+        where
+            U: IntoService<S>,
     {
         Self {
             service: service.into_service(),
@@ -133,11 +133,11 @@ where
 }
 
 impl<S> Service for InOrderService<S>
-where
-    S: Service,
-    S::Response: 'static,
-    S::Future: 'static,
-    S::Error: 'static,
+    where
+        S: Service,
+        S::Response: 'static,
+        S::Future: 'static,
+        S::Error: 'static,
 {
     type Request = S::Request;
     type Response = S::Response;
@@ -192,7 +192,6 @@ pub struct InOrderServiceResponse<S: Service> {
 }
 
 impl<S: Service> Future for InOrderServiceResponse<S> {
-
     type Output = Result<S::Response, InOrderError<S::Error>>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -207,14 +206,15 @@ impl<S: Service> Future for InOrderServiceResponse<S> {
 
 #[cfg(test)]
 mod tests {
-    use futures::future::{lazy, Future};
-    use futures::{stream::futures_unordered, sync::oneshot, Async, Poll, Stream};
+    use futures::future::{lazy, Future, LocalBoxFuture};
+    use futures::{stream::futures_unordered, channel::oneshot, Poll, Stream, StreamExt, TryFutureExt};
 
     use std::time::Duration;
 
     use super::*;
     use actix_service::blank::Blank;
     use actix_service::{Service, ServiceExt};
+    use futures::stream::FuturesUnordered;
 
     struct Srv;
 
@@ -222,28 +222,30 @@ mod tests {
         type Request = oneshot::Receiver<usize>;
         type Response = usize;
         type Error = ();
-        type Future = Box<dyn Future<Item = usize, Error = ()>>;
+        type Future = LocalBoxFuture<'static, Result<usize, ()>>;
 
-        fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-            Ok(Poll::Ready(()))
+        fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
         }
 
         fn call(&mut self, req: oneshot::Receiver<usize>) -> Self::Future {
-            Box::new(req.map_err(|_| ()))
+            req.map_err(|_|()).boxed_local()
         }
     }
 
+    #[pin_project]
     struct SrvPoll<S: Service> {
+        #[pin]
         s: S,
     }
 
     impl<S: Service> Future for SrvPoll<S> {
-        type Item = ();
-        type Error = ();
+        type Output = Result<(), ()>;
 
-        fn poll(&mut self) -> Poll<(), ()> {
-            let _ = self.s.poll_ready();
-            Ok(Poll::Pending)
+        fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+            let this = self.project();
+            let _ = this.s.poll_ready(cx);
+            Poll::Pending
         }
     }
 
@@ -252,30 +254,32 @@ mod tests {
         let (tx1, rx1) = oneshot::channel();
         let (tx2, rx2) = oneshot::channel();
         let (tx3, rx3) = oneshot::channel();
-        let (tx_stop, rx_stop) = oneshot::channel();
+        let (tx_stop, mut rx_stop) = oneshot::channel::<()>();
 
         let h = std::thread::spawn(move || {
             let rx1 = rx1;
             let rx2 = rx2;
             let rx3 = rx3;
             let tx_stop = tx_stop;
-            let _ = actix_rt::System::new("test").block_on(lazy(move || {
+            let _ = actix_rt::System::new("test").block_on(async move {
                 let mut srv = Blank::new().and_then(InOrderService::new(Srv));
 
                 let res1 = srv.call(rx1);
                 let res2 = srv.call(rx2);
                 let res3 = srv.call(rx3);
-                tokio_current_thread::spawn(SrvPoll { s: srv });
+                /*
+                tokio_executor::current_thread::spawn(async move { SrvPoll { s: srv }.await; });
 
-                futures_unordered(vec![res1, res2, res3])
+                futures::stream::iter(vec![res1, res2, res3].into_iter())
+                    .collect::<FuturesUnordered<_>>()
                     .collect()
                     .and_then(move |res: Vec<_>| {
                         assert_eq!(res, vec![1, 2, 3]);
                         let _ = tx_stop.send(());
                         actix_rt::System::current().stop();
                         Ok(())
-                    })
-            }));
+                    })*/
+            });
         });
 
         let _ = tx3.send(3);
@@ -283,7 +287,7 @@ mod tests {
         let _ = tx2.send(2);
         let _ = tx1.send(1);
 
-        let _ = rx_stop.wait();
+        let _ = rx_stop.close();
         let _ = h.join();
     }
 }

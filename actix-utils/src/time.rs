@@ -158,7 +158,7 @@ impl SystemTimeService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::future;
+    use futures::{future, FutureExt};
     use std::time::{Duration, SystemTime};
 
     /// State Under Test: Two calls of `SystemTimeService::now()` return the same value if they are done within resolution interval of `SystemTimeService`.
@@ -168,13 +168,13 @@ mod tests {
     fn system_time_service_time_does_not_immediately_change() {
         let resolution = Duration::from_millis(50);
 
-        let _ = actix_rt::System::new("test").block_on(future::lazy(|| {
+        let _ = actix_rt::System::new("test").block_on(async {
             let time_service = SystemTimeService::with(resolution);
 
             assert_eq!(time_service.now(), time_service.now());
 
             Ok::<(), ()>(())
-        }));
+        });
     }
 
     /// State Under Test: Two calls of `LowResTimeService::now()` return the same value if they are done within resolution interval of `SystemTimeService`.
@@ -184,13 +184,13 @@ mod tests {
     fn lowres_time_service_time_does_not_immediately_change() {
         let resolution = Duration::from_millis(50);
 
-        let _ = actix_rt::System::new("test").block_on(future::lazy(|| {
+        let _ = actix_rt::System::new("test").block_on(async {
             let time_service = LowResTimeService::with(resolution);
 
             assert_eq!(time_service.now(), time_service.now());
 
             Ok::<(), ()>(())
-        }));
+        });
     }
 
     /// State Under Test: `SystemTimeService::now()` updates returned value every resolution period.
@@ -202,7 +202,7 @@ mod tests {
         let resolution = Duration::from_millis(100);
         let wait_time = Duration::from_millis(150);
 
-        let _ = actix_rt::System::new("test").block_on(future::lazy(|| {
+        let _ = actix_rt::System::new("test").block_on(async {
             let time_service = SystemTimeService::with(resolution);
 
             let first_time = time_service
@@ -210,17 +210,17 @@ mod tests {
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap();
 
-            sleep(wait_time).then(move |_| {
-                let second_time = time_service
-                    .now()
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap();
+            sleep(wait_time).await;
 
-                assert!(second_time - first_time >= wait_time);
+            let second_time = time_service
+                .now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap();
 
-                Ok::<(), ()>(())
-            })
-        }));
+            assert!(second_time - first_time >= wait_time);
+
+            Ok::<(), ()>(())
+        });
     }
 
     /// State Under Test: `LowResTimeService::now()` updates returned value every resolution period.
@@ -232,18 +232,17 @@ mod tests {
         let resolution = Duration::from_millis(100);
         let wait_time = Duration::from_millis(150);
 
-        let _ = actix_rt::System::new("test").block_on(future::lazy(|| {
+        let _ = actix_rt::System::new("test").block_on(async {
             let time_service = LowResTimeService::with(resolution);
 
             let first_time = time_service.now();
 
-            sleep(wait_time).then(move |_| {
-                let second_time = time_service.now();
+            sleep(wait_time).await;
+            let second_time = time_service.now();
 
-                assert!(second_time - first_time >= wait_time);
+            assert!(second_time - first_time >= wait_time);
 
-                Ok::<(), ()>(())
-            })
-        }));
+            Ok::<(), ()>(())
+        });
     }
 }
