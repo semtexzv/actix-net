@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use actix_codec::{AsyncRead, AsyncWrite, Decoder, Encoder, Framed};
-use futures::unsync::mpsc;
+use futures::channel::mpsc;
 
 use crate::dispatcher::FramedMessage;
 use crate::sink::Sink;
@@ -72,13 +72,13 @@ impl<Io, St, Codec: Encoder + Decoder> ConnectResult<Io, St, Codec> {
     }
 }
 
+/*
 impl<Io, St, Codec> futures::Stream for ConnectResult<Io, St, Codec>
 where
     Io: AsyncRead + AsyncWrite,
     Codec: Encoder + Decoder,
 {
-    type Item = <Codec as Decoder>::Item;
-    type Error = <Codec as Decoder>::Error;
+    type Item =Result<<Codec as Decoder>::Item, <Codec as Decoder>::Error>;
 
     fn poll(&mut self) -> futures::Poll<Option<Self::Item>, Self::Error> {
         self.framed.poll()
@@ -108,3 +108,4 @@ where
         self.framed.close()
     }
 }
+*/
