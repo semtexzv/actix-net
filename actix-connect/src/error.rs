@@ -24,3 +24,4 @@ pub enum ConnectError {
     #[display(fmt = "{}", _0)]
     Io(io::Error),
 }
+
