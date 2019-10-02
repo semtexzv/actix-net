@@ -2,8 +2,9 @@
 use std::cell::RefCell;
 
 use actix_rt::{System, SystemRunner};
-use actix_service::Service;
-use futures::future::{lazy, Future, IntoFuture};
+use actix_service::{Service, IntoFuture};
+use futures::future::{lazy, Future};
+
 
 thread_local! {
     static RT: RefCell<Inner> = {
@@ -36,8 +37,8 @@ impl Drop for Inner {
 /// Note that this function is intended to be used only for testing purpose.
 /// This function panics on nested call.
 pub fn block_on<F>(f: F) -> Result<F::Item, F::Error>
-where
-    F: IntoFuture,
+    where
+        F: IntoFuture,
 {
     RT.with(move |rt| rt.borrow_mut().get_mut().block_on(f.into_future()))
 }
@@ -53,17 +54,17 @@ where
 /// Note that this function is intended to be used only for testing purpose.
 /// This function panics on nested call.
 pub fn block_fn<F, R>(f: F) -> Result<R::Item, R::Error>
-where
-    F: FnOnce() -> R,
-    R: IntoFuture,
+    where
+        F: FnOnce() -> R,
+        R: IntoFuture,
 {
-    RT.with(move |rt| rt.borrow_mut().get_mut().block_on(lazy(f)))
+    RT.with(move |rt| rt.borrow_mut().get_mut().block_on(async { f().into_future().await }))
 }
 
 /// Spawn future to the current test runtime.
 pub fn spawn<F>(fut: F)
-where
-    F: Future<Item = (), Error = ()> + 'static,
+    where
+        F: Future<Output=()> + 'static,
 {
     run_on(move || {
         actix_rt::spawn(fut);
@@ -75,15 +76,14 @@ where
 /// Note that this function is intended to be used only for testing purpose.
 /// This function panics on nested call.
 pub fn run_on<F, R>(f: F) -> R
-where
-    F: FnOnce() -> R,
+    where
+        F: FnOnce() -> R,
 {
     RT.with(move |rt| {
         rt.borrow_mut()
             .get_mut()
-            .block_on(lazy(|| Ok::<_, ()>(f())))
+            .block_on(async { f() })
     })
-    .unwrap()
 }
 
 /// Calls service and waits for response future completion.
@@ -108,9 +108,9 @@ where
 /// }
 /// ```
 pub fn call_service<S, R>(app: &mut S, req: R) -> S::Response
-where
-    S: Service<Request = R>,
-    S::Error: std::fmt::Debug,
+    where
+        S: Service<Request=R>,
+        S::Error: std::fmt::Debug,
 {
     block_on(run_on(move || app.call(req))).unwrap()
 }

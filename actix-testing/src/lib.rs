@@ -7,8 +7,8 @@ use actix_server::{Server, ServerBuilder, StreamServiceFactory};
 pub use actix_server_config::{Io, ServerConfig};
 
 use net2::TcpBuilder;
-use tokio_reactor::Handle;
-use tokio_tcp::TcpStream;
+use tokio_net::driver::Handle;
+use tokio_net::tcp::TcpStream;
 
 mod rt;
 pub use self::rt::*;
