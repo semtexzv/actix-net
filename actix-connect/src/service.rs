@@ -1,13 +1,17 @@
 use actix_service::{NewService, Service};
-use futures::future::{ok, FutureResult};
-use futures::{try_ready, Async, Future, Poll};
-use tokio_tcp::TcpStream;
+use futures::future::{ok, Ready};
+use futures::{ready, Future, Poll};
+use tokio_net::tcp::TcpStream;
 use trust_dns_resolver::AsyncResolver;
 
 use crate::connect::{Address, Connect, Connection};
 use crate::connector::{TcpConnector, TcpConnectorFactory};
 use crate::error::ConnectError;
 use crate::resolver::{Resolver, ResolverFactory};
+
+use pin_project::pin_project;
+use std::pin::Pin;
+use std::task::Context;
 
 pub struct ConnectServiceFactory<T> {
     tcp: TcpConnectorFactory<T>,
@@ -65,7 +69,7 @@ impl<T> Clone for ConnectServiceFactory<T> {
         }
     }
 }
-
+/*
 impl<T: Address> NewService for ConnectServiceFactory<T> {
     type Request = Connect<T>;
     type Response = Connection<T, TcpStream>;
@@ -79,7 +83,7 @@ impl<T: Address> NewService for ConnectServiceFactory<T> {
         ok(self.service())
     }
 }
-
+*/
 #[derive(Clone)]
 pub struct ConnectService<T> {
     tcp: TcpConnector<T>,
@@ -90,45 +94,25 @@ impl<T: Address> Service for ConnectService<T> {
     type Request = Connect<T>;
     type Response = Connection<T, TcpStream>;
     type Error = ConnectError;
-    type Future = ConnectServiceResponse<T>;
+    type Future = impl Future<Output=Result<Connection<T, TcpStream>, ConnectError>>;
 
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        Ok(Async::Ready(()))
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
+
 
     fn call(&mut self, req: Connect<T>) -> Self::Future {
-        ConnectServiceResponse {
-            fut1: Some(self.resolver.call(req)),
-            fut2: None,
-            tcp: self.tcp.clone(),
+        let mut fut = self.resolver.call(req);
+        let mut tcp = self.tcp.clone();
+
+        async move {
+            let res = fut.await?;
+            let res = tcp.call(res).await?;
+            Ok(res)
         }
     }
 }
 
-pub struct ConnectServiceResponse<T: Address> {
-    fut1: Option<<Resolver<T> as Service>::Future>,
-    fut2: Option<<TcpConnector<T> as Service>::Future>,
-    tcp: TcpConnector<T>,
-}
-
-impl<T: Address> Future for ConnectServiceResponse<T> {
-    type Item = Connection<T, TcpStream>;
-    type Error = ConnectError;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Some(ref mut fut) = self.fut1 {
-            let res = try_ready!(fut.poll());
-            let _ = self.fut1.take();
-            self.fut2 = Some(self.tcp.call(res));
-        }
-
-        if let Some(ref mut fut) = self.fut2 {
-            return fut.poll();
-        }
-
-        Ok(Async::NotReady)
-    }
-}
 
 #[derive(Clone)]
 pub struct TcpConnectService<T> {
@@ -140,44 +124,20 @@ impl<T: Address> Service for TcpConnectService<T> {
     type Request = Connect<T>;
     type Response = TcpStream;
     type Error = ConnectError;
-    type Future = TcpConnectServiceResponse<T>;
+    type Future = impl Future<Output=Result<TcpStream, ConnectError>>;
 
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        Ok(Async::Ready(()))
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
+
 
     fn call(&mut self, req: Connect<T>) -> Self::Future {
-        TcpConnectServiceResponse {
-            fut1: Some(self.resolver.call(req)),
-            fut2: None,
-            tcp: self.tcp.clone(),
+        let fut = self.resolver.call(req);
+        let mut tcp = self.tcp.clone();
+        async move {
+            let fut = fut.await?;
+            let fut = tcp.call(fut).await?;
+            Ok(fut.into_parts().0)
         }
-    }
-}
-
-pub struct TcpConnectServiceResponse<T: Address> {
-    fut1: Option<<Resolver<T> as Service>::Future>,
-    fut2: Option<<TcpConnector<T> as Service>::Future>,
-    tcp: TcpConnector<T>,
-}
-
-impl<T: Address> Future for TcpConnectServiceResponse<T> {
-    type Item = TcpStream;
-    type Error = ConnectError;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if let Some(ref mut fut) = self.fut1 {
-            let res = try_ready!(fut.poll());
-            let _ = self.fut1.take();
-            self.fut2 = Some(self.tcp.call(res));
-        }
-
-        if let Some(ref mut fut) = self.fut2 {
-            if let Async::Ready(conn) = fut.poll()? {
-                return Ok(Async::Ready(conn.into_parts().0));
-            }
-        }
-
-        Ok(Async::NotReady)
     }
 }

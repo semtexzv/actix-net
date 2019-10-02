@@ -3,12 +3,14 @@ use std::marker::PhantomData;
 use std::net::SocketAddr;
 
 use actix_service::{NewService, Service};
-use futures::future::{err, ok, Either, FutureResult};
-use futures::{Async, Future, Poll};
-use tokio_tcp::{ConnectFuture, TcpStream};
+use futures::future::{err, ok, Ready};
+use futures::{Future, Poll};
+use tokio_net::tcp::TcpStream;
 
 use super::connect::{Address, Connect, Connection};
 use super::error::ConnectError;
+use std::pin::Pin;
+use std::task::Context;
 
 /// Tcp connector service factory
 #[derive(Debug)]
@@ -44,7 +46,7 @@ impl<T: Address> NewService for TcpConnectorFactory<T> {
     type Config = ();
     type Service = TcpConnector<T>;
     type InitError = ();
-    type Future = FutureResult<Self::Service, Self::InitError>;
+    type Future = Ready<Result<Self::Service, Self::InitError>>;
 
     fn new_service(&self, _: &()) -> Self::Future {
         ok(self.service())
@@ -71,98 +73,41 @@ impl<T: Address> Service for TcpConnector<T> {
     type Request = Connect<T>;
     type Response = Connection<T, TcpStream>;
     type Error = ConnectError;
-    type Future = Either<TcpConnectorResponse<T>, FutureResult<Self::Response, Self::Error>>;
+    type Future = impl Future<Output=Result<Connection<T, TcpStream>, ConnectError>>;
 
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        Ok(Async::Ready(()))
+    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 
+
     fn call(&mut self, req: Connect<T>) -> Self::Future {
+        // TODO: logging
         let port = req.port();
         let Connect { req, addr, .. } = req;
 
-        if let Some(addr) = addr {
-            Either::A(TcpConnectorResponse::new(req, port, addr))
-        } else {
-            error!("TCP connector: got unresolved address");
-            Either::B(err(ConnectError::Unresolverd))
-        }
-    }
-}
-
-#[doc(hidden)]
-/// Tcp stream connector response future
-pub struct TcpConnectorResponse<T> {
-    req: Option<T>,
-    port: u16,
-    addrs: Option<VecDeque<SocketAddr>>,
-    stream: Option<ConnectFuture>,
-}
-
-impl<T: Address> TcpConnectorResponse<T> {
-    pub fn new(
-        req: T,
-        port: u16,
-        addr: either::Either<SocketAddr, VecDeque<SocketAddr>>,
-    ) -> TcpConnectorResponse<T> {
-        trace!(
-            "TCP connector - connecting to {:?} port:{}",
-            req.host(),
-            port
-        );
-
-        match addr {
-            either::Either::Left(addr) => TcpConnectorResponse {
-                req: Some(req),
-                port,
-                addrs: None,
-                stream: Some(TcpStream::connect(&addr)),
-            },
-            either::Either::Right(addrs) => TcpConnectorResponse {
-                req: Some(req),
-                port,
-                addrs: Some(addrs),
-                stream: None,
-            },
-        }
-    }
-}
-
-impl<T: Address> Future for TcpConnectorResponse<T> {
-    type Item = Connection<T, TcpStream>;
-    type Error = ConnectError;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        // connect
-        loop {
-            if let Some(new) = self.stream.as_mut() {
-                match new.poll() {
-                    Ok(Async::Ready(sock)) => {
-                        let req = self.req.take().unwrap();
-                        trace!(
-                            "TCP connector - successfully connected to connecting to {:?} - {:?}",
-                            req.host(), sock.peer_addr()
-                        );
-                        return Ok(Async::Ready(Connection::new(sock, req)));
-                    }
-                    Ok(Async::NotReady) => return Ok(Async::NotReady),
-                    Err(err) => {
-                        trace!(
-                            "TCP connector - failed to connect to connecting to {:?} port: {}",
-                            self.req.as_ref().unwrap().host(),
-                            self.port,
-                        );
-                        if self.addrs.is_none() || self.addrs.as_ref().unwrap().is_empty() {
-                            return Err(err.into());
+        async move {
+            let mut addr = if let Some(addr) = addr {
+                addr
+            } else {
+                error!("TCP connector: got unresolved address");
+                return Err(ConnectError::Unresolverd);
+            };
+            match addr {
+                either::Either::Left(addr) => {
+                    let stream = TcpStream::connect(addr).await?;
+                    return Ok(Connection::new(stream, req));
+                }
+                either::Either::Right(ref mut addrs) => {
+                    while let Some(addr) = addrs.pop_front() {
+                        let stream = TcpStream::connect(addr).await;
+                        if let Ok(stream) = stream {
+                            return Ok(Connection::new(stream, req));
                         }
                     }
                 }
             }
 
-            // try to connect
-            self.stream = Some(TcpStream::connect(
-                &self.addrs.as_mut().unwrap().pop_front().unwrap(),
-            ));
+            Err(ConnectError::Unresolverd)
         }
     }
 }
