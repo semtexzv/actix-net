@@ -44,9 +44,9 @@ actix-server-config = "0.1.0"
 
 log = "0.4"
 net2 = "0.2"
-futures = { package = "futures-preview", version = "0.3.0-alpha.18"}
-tokio-io = "0.2.0-alpha.4"
-tokio-net = "0.2.0-alpha.4"
+futures = { package = "futures-preview", version = "0.3.0-alpha.19"}
+tokio-io = "0.2.0-alpha.6"
+tokio-net = "0.2.0-alpha.6"
 
 # native-tls
 native-tls = { version="0.2", optional = true }

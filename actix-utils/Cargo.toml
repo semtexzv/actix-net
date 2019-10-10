@@ -23,10 +23,10 @@ actix-codec = "0.1.2"
 bytes = "0.4"
 either = "1.5.2"
 
-futures = { package = "futures-preview", version = "0.3.0-alpha.18" }
+futures = { package = "futures-preview", version = "0.3.0-alpha.19" }
 pin-project = "0.4.2"
 tokio-timer = "0.3.0-alpha.4"
-tokio-executor = "0.2.0-alpha.4"
+tokio-executor = "0.2.0-alpha.6"
 
 log = "0.4"
 

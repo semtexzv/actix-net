@@ -39,11 +39,11 @@ actix-utils = "0.4.0"
 actix-rt = "0.2.5"
 derive_more = "0.15"
 either = "1.5.2"
-futures = { package = "futures-preview", version = "0.3.0-alpha.18" }
+futures = { package = "futures-preview", version = "0.3.0-alpha.19" }
 http = { version = "0.1.17", optional = true }
 log = "0.4"
-tokio-net = { version = "0.2.0-alpha.4"}
-tokio-executor = "=0.2.0-alpha.4"
+tokio-net = { version = "0.2.0-alpha.6"}
+tokio-executor = "=0.2.0-alpha.6"
 trust-dns-resolver = { version="0.11.0", default-features = false }
 
 pin-project = "0.4.0-alpha.11"
