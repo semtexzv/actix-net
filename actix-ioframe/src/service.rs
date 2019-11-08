@@ -13,6 +13,7 @@ use crate::state::State;
 use std::task::Context;
 use std::pin::Pin;
 use futures::future::LocalBoxFuture;
+use std::ops::GeneratorState;
 
 type RequestItem<S, U> = Item<S, U>;
 type ResponseItem<U> = Option<<U as Encoder>::Item>;
@@ -220,7 +221,9 @@ impl<St, C, T, Io, Codec, Cfg> NewService for FramedService<St, C, T, Io, Codec,
     }
 }
 
+#[pin_project::pin_project]
 pub struct FramedServiceImpl<St, C, T, Io, Codec> {
+    #[pin]
     connect: C,
     handler: Rc<T>,
     disconnect: Option<Rc<dyn Fn(&mut St, bool)>>,
@@ -250,16 +253,9 @@ impl<St, C, T, Io, Codec> Service for FramedServiceImpl<St, C, T, Io, Codec>
     type Error = ServiceError<C::Error, Codec>;
     type Future = FramedServiceImplResponse<St, Io, Codec, C, T>;
 
-    fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        unimplemented!()
+    fn poll_ready(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project().connect.poll_ready(ctx).map_err(|e| e.into())
     }
-
-
-    /*
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        self.connect.poll_ready().map_err(|e| e.into())
-    }
-    */
 
     fn call(&mut self, req: Io) -> Self::Future {
         FramedServiceImplResponse {
@@ -376,4 +372,11 @@ impl<St, Io, Codec, C, T> Future for FramedServiceImplResponse<St, Io, Codec, C,
         }
     }
     */
+}
+
+pub trait FnGen<Args>: Fn<Args> {
+    type Yield;
+    type Return;
+
+    fn call_resume(self: Pin<&mut Self>, args: Args) -> Self::Output;
 }

@@ -34,13 +34,9 @@ rust-tls = ["rustls", "tokio-rustls", "webpki", "webpki-roots"]
 
 [dependencies]
 actix-rt = "0.2.1"
-actix-server = "0.5.0"
-<<<<<<< HEAD
+actix-server = "0.7.0"
 actix-server-config = "0.2.0"
 actix-testing = "0.1.0"
-=======
-actix-server-config = "0.1.0"
->>>>>>> Migrate actix-server to std::future
 
 log = "0.4"
 net2 = "0.2"

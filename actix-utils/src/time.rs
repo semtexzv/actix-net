@@ -4,7 +4,7 @@ use std::time::{self, Duration, Instant};
 use actix_service::{NewService, Service};
 use futures::future::{ok, Ready};
 use futures::{Future, Poll};
-use tokio_timer::sleep;
+use tokio_timer::delay_for;
 
 use super::cell::Cell;
 use std::pin::Pin;
@@ -82,7 +82,7 @@ impl LowResTimeService {
             };
 
             tokio_executor::current_thread::spawn(async move {
-                sleep(interval).await;
+                delay_for(interval).await;
                 inner.get_mut().current.take();
             });
             now
@@ -147,7 +147,7 @@ impl SystemTimeService {
             };
 
             tokio_executor::current_thread::spawn(async move {
-                sleep(interval).await;
+                delay_for(interval).await;
                 inner.get_mut().current.take();
             });
             now

@@ -7,7 +7,7 @@ use futures::channel::oneshot;
 use futures::{future, Future, Poll, Stream, TryFutureExt};
 use futures::{FutureExt, StreamExt};
 use log::{error, info, trace};
-use tokio_timer::{sleep, Delay};
+use tokio_timer::{delay_for, Delay};
 
 use crate::accept::AcceptNotify;
 use crate::counter::Counter;
@@ -15,7 +15,7 @@ use crate::services::{BoxedServerService, InternalServiceFactory, ServerMessage}
 use crate::socket::{SocketAddr, StdStream};
 use crate::Token;
 use actix_rt::spawn;
-use futures::future::{LocalBoxFuture, MapOk};
+use futures::future::{LocalBoxFuture, MapOk, ok};
 use std::pin::Pin;
 use std::task::Context;
 
@@ -179,12 +179,13 @@ impl Worker {
                                 }
                             }
                         }
-                        Ok::<_, ()>(wrk);
+                        ok::<_, ()>(wrk)
                     }
                     Err(e) => {
-                        //return Err(e);
+                        //Err(e)
+                        panic!("E {:?}", e)
                     }
-                }
+                }.await;
             }
                 .boxed_local(),
         );
@@ -253,20 +254,26 @@ enum WorkerState {
     Restarting(
         usize,
         Token,
-        Box<dyn Future<Output = Result<Vec<(Token, BoxedServerService)>, ()>>>,
+        Box<dyn Future<Output=Result<Vec<(Token, BoxedServerService)>, ()>>>,
     ),
     Shutdown(Delay, Delay, oneshot::Sender<bool>),
 }
 
+impl Worker {
+    async fn future(mut self) {
+        match self.state {
+            WorkerState::Unavailable(conns) => {
+                let polled = future::poll_fn(|cx| self.check_readiness(true, cx)).await;
+            }
+        }
+    }
+}
+
+/*
 impl Future for Worker {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        unimplemented!()
-    }
-
-    /*
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         // `StopWorker` message handler
         if let Ok(Async::Ready(Some(StopCommand { graceful, result }))) = self.rx2.poll() {
             self.availability.set(false);
@@ -376,6 +383,7 @@ impl Future for Worker {
                         );
                     }
                 }
+                z
                 return self.poll();
             }
             WorkerState::Shutdown(mut t1, mut t2, tx) => {
@@ -454,5 +462,5 @@ impl Future for Worker {
             WorkerState::None => panic!(),
         };
     }
-    */
 }
+*/

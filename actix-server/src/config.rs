@@ -260,7 +260,6 @@ where
     type Service = BoxedServerService;
     type Future = LocalBoxFuture<'static, Result<BoxedServerService, ()>>;
 
-    // Box<dyn Future<Output=Result<Vec<(Token, BoxedServerService)>, ()>>>;
 
     fn new_service(&self, cfg: &ServerConfig) -> Self::Future {
         let fut = self.inner.new_service(cfg);

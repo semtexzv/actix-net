@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use std::net::SocketAddr;
 
 use actix_service::{NewService, Service};
-use futures::future::{err, ok, Ready};
-use futures::{Future, Poll};
+use futures::future::{err, ok, Ready, LocalBoxFuture};
+use futures::{Future, Poll, FutureExt};
 use tokio_net::tcp::TcpStream;
 
 use super::connect::{Address, Connect, Connection};
@@ -39,7 +39,7 @@ impl<T> Clone for TcpConnectorFactory<T> {
     }
 }
 
-impl<T: Address> NewService for TcpConnectorFactory<T> {
+impl<T: Address + 'static > NewService for TcpConnectorFactory<T> {
     type Request = Connect<T>;
     type Response = Connection<T, TcpStream>;
     type Error = ConnectError;
@@ -69,11 +69,11 @@ impl<T> Clone for TcpConnector<T> {
     }
 }
 
-impl<T: Address> Service for TcpConnector<T> {
+impl<T: Address + 'static> Service for TcpConnector<T> {
     type Request = Connect<T>;
     type Response = Connection<T, TcpStream>;
     type Error = ConnectError;
-    type Future = impl Future<Output=Result<Connection<T, TcpStream>, ConnectError>>;
+    type Future = LocalBoxFuture<'static, Result<Connection<T, TcpStream>, ConnectError>>;
 
     fn poll_ready(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -108,6 +108,6 @@ impl<T: Address> Service for TcpConnector<T> {
             }
 
             Err(ConnectError::Unresolverd)
-        }
+        }.boxed_local()
     }
 }

@@ -77,7 +77,7 @@ where
         let this = self.project();
         if let Poll::Pending = this.service.poll_ready(ctx)? {
             Poll::Pending
-        } else if !this.count.available() {
+        } else if !this.count.available(ctx) {
             log::trace!("InFlight limit exceeded");
             Poll::Pending
         } else {

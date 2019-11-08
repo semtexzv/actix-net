@@ -106,6 +106,7 @@ fn test_start() {
         let srv = Server::build()
             .backlog(100)
             .bind("test", addr, move || {
+
                 new_service_cfg(move |cfg: &ServerConfig| {
                     assert_eq!(cfg.local_addr(), addr);
 
@@ -126,7 +127,7 @@ fn test_start() {
         let _ = sys.run();
     });
     let (srv, sys) = rx.recv().unwrap();
-
+    println!("Server running");
     let mut buf = [1u8; 4];
     let mut conn = net::TcpStream::connect(addr).unwrap();
     let _ = conn.read_exact(&mut buf);

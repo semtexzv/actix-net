@@ -30,6 +30,7 @@ rust-tls = ["rustls", "tokio-rustls"]
 uds = [] # ["tokio-uds"]
 
 [dependencies]
+tokio = "0.2.0-alpha.6"
 futures = { package = "futures-preview", version = "0.3.0-alpha.19" }
 tokio-openssl = { version="0.4.0-alpha.4", optional = true }
 rustls = { version = "0.16.0", optional = true }

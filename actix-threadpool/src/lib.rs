@@ -74,7 +74,7 @@ impl<I> Future for CpuFuture<I> {
     type Output = Result<I,Cancelled>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let rx =  Pin::new(Pin::get_mut(self));
+        let rx =  Pin::new(&mut Pin::get_mut(self).rx);
         let res =  futures::ready!(rx.poll(cx));
         Poll::Ready(res.map_err(|_| Cancelled))
     }

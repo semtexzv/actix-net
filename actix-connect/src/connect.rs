@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use either::Either;
 
 /// Connect request
-pub trait Address {
+pub trait Address : 'static {
     /// Host name of the request
     fn host(&self) -> &str;
 

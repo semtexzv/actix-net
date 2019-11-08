@@ -10,7 +10,7 @@ use log::{error, info};
 use net2::TcpBuilder;
 use num_cpus;
 use tokio_net::tcp::TcpStream;
-use tokio_timer::sleep;
+use tokio_timer::delay_for;
 
 use crate::accept::{AcceptLoop, AcceptNotify, Command};
 use crate::config::{ConfiguredService, ServiceConfig};
@@ -397,7 +397,7 @@ impl ServerBuilder {
                                 if exit {
                                     spawn(
                                         async {
-                                            tokio_timer::sleep(Duration::from_millis(300))
+                                            tokio_timer::delay_for(Duration::from_millis(300))
                                                 .await;
                                             System::current().stop();
                                         }
@@ -410,7 +410,7 @@ impl ServerBuilder {
                 } else {
                     // we need to stop system if server was spawned
                     if self.exit {
-                        spawn(sleep(Duration::from_millis(300)).then(|_| {
+                        spawn(delay_for(Duration::from_millis(300)).then(|_| {
                             System::current().stop();
                             ready(())
                         }));

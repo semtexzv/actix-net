@@ -26,7 +26,7 @@ pub(crate) enum ServerMessage {
 }
 
 pub trait ServiceFactory<Stream: FromStream>: Send + Clone + 'static {
-    type NewService: NewService<Config = ServerConfig, Request = Io<Stream>>;
+    type NewService: NewService<Config=ServerConfig, Request=Io<Stream>>;
 
     fn create(&self) -> Self::NewService;
 }
@@ -41,14 +41,16 @@ pub(crate) trait InternalServiceFactory: Send {
 
 pub(crate) type BoxedServerService = Box<
     dyn Service<
-        Request = (Option<CounterGuard>, ServerMessage),
-        Response = (),
-        Error = (),
-        Future = Ready<Result<(), ()>>,
+        Request=(Option<CounterGuard>, ServerMessage),
+        Response=(),
+        Error=(),
+        Future=Ready<Result<(), ()>>,
     >,
 >;
 
+#[pin_project::pin_project]
 pub(crate) struct StreamService<T> {
+    #[pin]
     service: T,
 }
 
@@ -59,11 +61,11 @@ impl<T> StreamService<T> {
 }
 
 impl<T, I> Service for StreamService<T>
-where
-    T: Service<Request = Io<I>>,
-    T::Future: 'static,
-    T::Error: 'static,
-    I: FromStream,
+    where
+        T: Service<Request=Io<I>>,
+        T::Future: 'static,
+        T::Error: 'static,
+        I: FromStream,
 {
     type Request = (Option<CounterGuard>, ServerMessage);
     type Response = ();
@@ -74,14 +76,9 @@ where
         self: Pin<&mut Self>,
         ctx: &mut Context<'_>,
     ) -> Poll<Result<(), Self::Error>> {
-        unimplemented!()
+        Poll::Ready(futures::ready!(self.project().service.poll_ready(ctx)).map_err(|_| ()))
     }
 
-    /*
-    fn poll_ready(&mut self) -> Poll<(), Self::Error> {
-        self.service.poll_ready().map_err(|_| ())
-    }
-    */
     fn call(&mut self, (guard, req): (Option<CounterGuard>, ServerMessage)) -> Self::Future {
         match req {
             ServerMessage::Connect(stream) => {
@@ -117,9 +114,9 @@ pub(crate) struct StreamNewService<F: ServiceFactory<Io>, Io: FromStream> {
 }
 
 impl<F, Io> StreamNewService<F, Io>
-where
-    F: ServiceFactory<Io>,
-    Io: FromStream + Send + 'static,
+    where
+        F: ServiceFactory<Io>,
+        Io: FromStream + Send + 'static,
 {
     pub(crate) fn create(
         name: String,
@@ -138,9 +135,9 @@ where
 }
 
 impl<F, Io> InternalServiceFactory for StreamNewService<F, Io>
-where
-    F: ServiceFactory<Io>,
-    Io: FromStream + Send + 'static,
+    where
+        F: ServiceFactory<Io>,
+        Io: FromStream + Send + 'static,
 {
     fn name(&self, _: Token) -> &str {
         &self.name
@@ -187,10 +184,10 @@ impl InternalServiceFactory for Box<dyn InternalServiceFactory> {
 }
 
 impl<F, T, I> ServiceFactory<I> for F
-where
-    F: Fn() -> T + Send + Clone + 'static,
-    T: NewService<Config = ServerConfig, Request = Io<I>>,
-    I: FromStream,
+    where
+        F: Fn() -> T + Send + Clone + 'static,
+        T: NewService<Config=ServerConfig, Request=Io<I>>,
+        I: FromStream,
 {
     type NewService = T;
 

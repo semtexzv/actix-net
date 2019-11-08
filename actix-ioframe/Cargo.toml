@@ -23,13 +23,14 @@ actix-codec = "0.1.2"
 bytes = "0.4"
 either = "1.5.2"
 futures = { package = "futures-preview", version = "0.3.0-alpha.19" }
+pin-project = "0.4.2"
 tokio-executor = "0.2.0-alpha.6"
 log = "0.4"
 
 [dev-dependencies]
 actix-rt = "0.2.2"
-actix-connect = "0.2.0"
+actix-connect = "0.3.0"
 actix-testing = "0.1.0"
 actix-server-config = "0.2.0"
-tokio-tcp = "0.1"
-tokio-timer = "0.2"
+tokio-net = "0.2.0-alpha.6"
+tokio-timer = "0.3.0-alpha.6"

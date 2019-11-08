@@ -69,7 +69,7 @@ impl<T> Clone for ConnectServiceFactory<T> {
         }
     }
 }
-/*
+
 impl<T: Address> NewService for ConnectServiceFactory<T> {
     type Request = Connect<T>;
     type Response = Connection<T, TcpStream>;
@@ -77,20 +77,20 @@ impl<T: Address> NewService for ConnectServiceFactory<T> {
     type Config = ();
     type Service = ConnectService<T>;
     type InitError = ();
-    type Future = FutureResult<Self::Service, Self::InitError>;
+    type Future = Ready<Result<Self::Service, Self::InitError>>;
 
     fn new_service(&self, _: &()) -> Self::Future {
         ok(self.service())
     }
 }
-*/
+
 #[derive(Clone)]
 pub struct ConnectService<T> {
     tcp: TcpConnector<T>,
     resolver: Resolver<T>,
 }
 
-impl<T: Address> Service for ConnectService<T> {
+impl<T: Address + 'static> Service for ConnectService<T> {
     type Request = Connect<T>;
     type Response = Connection<T, TcpStream>;
     type Error = ConnectError;
@@ -120,7 +120,7 @@ pub struct TcpConnectService<T> {
     resolver: Resolver<T>,
 }
 
-impl<T: Address> Service for TcpConnectService<T> {
+impl<T: Address + 'static> Service for TcpConnectService<T> {
     type Request = Connect<T>;
     type Response = TcpStream;
     type Error = ConnectError;

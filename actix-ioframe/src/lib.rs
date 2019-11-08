@@ -1,3 +1,5 @@
+#![feature(unboxed_closures)]
+#![feature(generator_trait)]
 mod cell;
 mod connect;
 mod dispatcher;
